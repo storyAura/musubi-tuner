@@ -56,6 +56,8 @@ export const store = reactive({
   modelLib: { dir: '', catalog: [], files: {}, checked: false },
   // 全部 12 架构的完整模型清单(模型页「全部模型」区)
   modelLibAll: { architectures: [], checked: false },
+  // 进行中的模型下载(独立于训练状态机):filename → { jobId, status }
+  downloads: {},
   values: {
     project_dir: '',
     model_arch: 'qwen-image',
@@ -205,6 +207,10 @@ export async function loadAllModels() {
   }
 }
 
+// 下载与训练职责分离:下载绝不触碰训练状态机(status/jobId/exit),
+// 状态挂在 store.downloads 上由模型页展示,日志流入终端,完成/失败记入队列历史。
+const esDownloads = {}
+
 export async function downloadModel(architecture, filename) {
   try {
     const job = await postJson('/api/v1/models/download', { architecture, filename })
@@ -213,17 +219,49 @@ export async function downloadModel(architecture, filename) {
       refreshModels()
       return
     }
-    store.jobId = job.job_id
-    store.status = 'queued'
-    store.startedAt = nowHHMM()
-    store.exit = null
+    store.downloads = { ...store.downloads, [filename]: { jobId: job.job_id, status: job.status || 'queued' } }
     log('dim', '[job] accepted ' + job.job_id + ' · ' + job.workflow + ' · ' + job.note)
     toast('info', '下载已开始 · ' + job.note + ' · 进度见终端')
-    attachRealJob(job.job_id)
+    attachDownloadJob(job.job_id, filename)
   } catch (err) {
     log('err', 'ERROR: ' + err.message)
     toast('error', '下载提交失败 · ' + err.message)
   }
+}
+
+function attachDownloadJob(jobId, filename) {
+  const t0 = Date.now()
+  const startedAt = nowHHMM()
+  esDownloads[jobId] = subscribeJobEvents(jobId, ev => {
+    if (ev.type === 'log') {
+      log(ev.kind || 'ink', ev.text)
+      return
+    }
+    if (ev.type !== 'status') return
+    const st = ev.status
+    store.downloads = { ...store.downloads, [filename]: { jobId, status: st } }
+    if (st !== 'succeeded' && st !== 'failed' && st !== 'cancelled') return
+    if (st === 'succeeded') toast('info', '模型下载完成 · ' + filename)
+    else if (st === 'failed') toast('error', '模型下载失败 · ' + filename + ' · 详情见终端日志')
+    else toast('warn', '下载已取消 · ' + filename)
+    store.doneJobs = [{
+      id: jobId, workflow: 'download', note: filename, status: st,
+      progress: '—', started: startedAt, duration: clock((Date.now() - t0) / 1000),
+    }].concat(store.doneJobs)
+    const { [filename]: _done, ...rest } = store.downloads
+    store.downloads = st === 'failed' ? { ...store.downloads } : rest // 失败保留状态供「重试」展示
+    if (esDownloads[jobId]) { esDownloads[jobId].close(); delete esDownloads[jobId] }
+    refreshModels()
+    loadAllModels()
+  })
+}
+
+export function cancelDownload(filename) {
+  const d = store.downloads[filename]
+  if (!d) return
+  postJson('/api/v1/jobs/' + d.jobId + '/cancel').catch(err => {
+    toast('error', '取消失败 · ' + err.message)
+  })
 }
 
 export function pushLogs(pairs) {
@@ -799,6 +837,7 @@ export function destroy() {
   clearInterval(envTimer)
   clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4)
   if (esHandle) { esHandle.close(); esHandle = null }
+  for (const id of Object.keys(esDownloads)) { esDownloads[id].close(); delete esDownloads[id] }
   if (mq && onMqFn) mq.removeEventListener('change', onMqFn)
   if (onKeyFn) window.removeEventListener('keydown', onKeyFn)
 }

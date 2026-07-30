@@ -86,7 +86,7 @@ const termAway = computed(() => store.termPinned || store.termFull)
     <div v-if="store.exit" style="border:1px solid var(--error);border-radius:8px;overflow:hidden;margin-bottom:24px;animation:cardIn .2s ease both">
       <div style="display:flex;align-items:center;gap:8px;background:var(--error-soft);padding:10px 16px">
         <span style="width:6px;height:6px;border-radius:50%;background:var(--error)"></span>
-        <span style="font-size:14px;font-weight:500;color:var(--ink)">训练失败</span>
+        <span style="font-size:14px;font-weight:500;color:var(--ink)">作业失败</span>
         <span style="font-family:var(--font-mono);font-size:12px;color:var(--body)">{{ store.exit.line }}</span>
       </div>
       <div style="background:var(--terminal-bg);padding:12px 16px">

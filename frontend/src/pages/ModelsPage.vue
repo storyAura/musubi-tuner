@@ -2,9 +2,12 @@
 // 模型库:上半部分是当前架构+变体的推荐清单(自动选择联动);
 // 下半部分是全部 12 个架构的完整可训练模型清单(按架构分组,均为实测核对的官方权重)。
 import { computed, onMounted } from 'vue'
-import { store, demo, downloadModel, refreshModels, loadAllModels } from '../store.js'
+import { store, demo, downloadModel, cancelDownload, refreshModels, loadAllModels } from '../store.js'
 
-const busy = computed(() => ['queued', 'validating', 'running', 'cancelling'].includes(store.status))
+// 下载状态独立于训练状态机;每个条目按自身 filename 查询下载进度
+function dlStatus(filename) {
+  return store.downloads[filename]?.status || ''
+}
 const archLabel = computed(() => {
   const v = store.values
   const variant = v.model_version || v.model_type || v.task || ''
@@ -73,13 +76,23 @@ onMounted(() => { if (!store.modelLibAll.checked) loadAllModels() })
           <span v-if="c.exists" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>已就绪
           </span>
+          <span v-else-if="['queued', 'running', 'cancelling'].includes(dlStatus(c.filename))"
+            style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:breathe 2s ease-in-out infinite"></span>下载中
+          </span>
+          <span v-else-if="dlStatus(c.filename) === 'failed'"
+            style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--error)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--error)"></span>失败
+          </span>
           <span v-else style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--mute)">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--hairline-strong)"></span>未下载
           </span>
-          <button v-if="!c.exists" @click="downloadModel(store.values.model_arch, c.filename)" :disabled="busy"
-            :style="busy ? 'opacity:.4;cursor:not-allowed' : 'cursor:pointer'"
-            class="hv-fade"
-            style="height:32px;padding:0 12px;background:var(--primary);color:var(--on-primary);border:none;border-radius:6px;font-size:13px;font-weight:500;white-space:nowrap;transition:opacity .14s ease">下载</button>
+          <button v-if="!c.exists && ['queued', 'running'].includes(dlStatus(c.filename))"
+            @click="cancelDownload(c.filename)" class="hv-line"
+            style="height:32px;padding:0 12px;background:transparent;border:1px solid var(--hairline);border-radius:6px;font-size:13px;font-weight:500;color:var(--body);white-space:nowrap;cursor:pointer">取消</button>
+          <button v-else-if="!c.exists && dlStatus(c.filename) !== 'cancelling'"
+            @click="downloadModel(store.values.model_arch, c.filename)" class="hv-fade"
+            style="height:32px;padding:0 12px;background:var(--primary);color:var(--on-primary);border:none;border-radius:6px;font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer;transition:opacity .14s ease">{{ dlStatus(c.filename) === 'failed' ? '重试' : '下载' }}</button>
           <span v-else></span>
         </div>
       </section>
@@ -107,13 +120,23 @@ onMounted(() => { if (!store.modelLibAll.checked) loadAllModels() })
           <span v-if="c.exists" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>已就绪
           </span>
+          <span v-else-if="['queued', 'running', 'cancelling'].includes(dlStatus(c.filename))"
+            style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:breathe 2s ease-in-out infinite"></span>下载中
+          </span>
+          <span v-else-if="dlStatus(c.filename) === 'failed'"
+            style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--error)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--error)"></span>失败
+          </span>
           <span v-else style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--mute)">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--hairline-strong)"></span>未下载
           </span>
-          <button v-if="!c.exists" @click="downloadModel(g.id, c.filename)" :disabled="busy"
-            :style="busy ? 'opacity:.4;cursor:not-allowed' : 'cursor:pointer'"
-            class="hv-border"
-            style="height:30px;padding:0 12px;background:var(--surface);border:1px solid var(--hairline);border-radius:6px;font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;transition:border-color .14s ease">下载</button>
+          <button v-if="!c.exists && ['queued', 'running'].includes(dlStatus(c.filename))"
+            @click="cancelDownload(c.filename)" class="hv-line"
+            style="height:30px;padding:0 12px;background:transparent;border:1px solid var(--hairline);border-radius:6px;font-size:12px;font-weight:500;color:var(--body);white-space:nowrap;cursor:pointer">取消</button>
+          <button v-else-if="!c.exists && dlStatus(c.filename) !== 'cancelling'"
+            @click="downloadModel(g.id, c.filename)" class="hv-border"
+            style="height:30px;padding:0 12px;background:var(--surface);border:1px solid var(--hairline);border-radius:6px;font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;cursor:pointer;transition:border-color .14s ease">{{ dlStatus(c.filename) === 'failed' ? '重试' : '下载' }}</button>
           <span v-else></span>
         </div>
       </section>
