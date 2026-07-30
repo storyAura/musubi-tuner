@@ -43,19 +43,28 @@ const deviceCard = computed(() => {
       ],
     }
   }
+  if (e.backend) {
+    // 后端在线但 nvidia-smi 无 GPU:无卡模式或无 NVIDIA 显卡,如实显示,不冒用浏览器显卡
+    return {
+      eyebrow: 'DEVICE', title: '设备(训练机)', rows: [
+        { k: 'gpu', v: '未检测到 · 无卡模式或无 NVIDIA GPU', dotWarn: true },
+        { k: 'hint', v: '有卡开机后自动恢复实时显示', dotOff: true },
+      ],
+    }
+  }
   if (e.source === 'webgl') {
     return {
-      eyebrow: 'DEVICE', title: '设备', rows: [
-        { k: 'gpu', v: e.gpuName, dotOk: true },
+      eyebrow: 'DEVICE', title: '设备(本机浏览器 · 非训练机)', rows: [
+        { k: 'gpu', v: e.gpuName + '(浏览器设备)', dotOff: true },
         { k: 'vram', v: '未知 · 浏览器无法读取', dotOff: true },
-        { k: 'driver', v: '未知 · 需本地环境 API', dotOff: true },
+        { k: 'driver', v: '未知 · 需后端环境 API', dotOff: true },
       ],
     }
   }
   return {
     eyebrow: 'DEVICE', title: '设备', rows: [
       { k: 'gpu', v: '未检测到', dotOff: true },
-      { k: 'hint', v: '通过 npm run dev 打开可读取 nvidia-smi', dotOff: true },
+      { k: 'hint', v: '启动后端后可读取 nvidia-smi', dotOff: true },
     ],
   }
 })

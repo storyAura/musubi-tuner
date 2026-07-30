@@ -24,8 +24,8 @@ from pydantic import BaseModel, Field
 
 from .capability import (
     TRAIN_ENTRY, FULL_FINETUNE_ENTRY, REPO_ROOT, MODELS_DIR, ROLE_SUBDIR,
-    build_sample_prompt_text, capabilities_payload, model_catalog_for,
-    render_cache_argv, render_train_argv,
+    build_sample_prompt_text, capabilities_payload, find_catalog_entry,
+    model_catalog_all, model_catalog_for, render_cache_argv, render_train_argv,
 )
 from .jobs import Job, manager
 
@@ -109,35 +109,46 @@ def capabilities():
 
 class DownloadRequest(BaseModel):
     architecture: str
-    model_version: str = ""
-    role: str
+    filename: str
+
+
+def _library_files() -> dict:
+    files = {}
+    for sub in sorted(set(ROLE_SUBDIR.values())):
+        d = MODELS_DIR / sub
+        files[sub] = sorted(f.name for f in d.iterdir() if f.is_file()) if d.is_dir() else []
+    return files
 
 
 @app.get("/api/v1/models")
 async def list_models(architecture: str, model_version: str = ""):
-    files = {}
-    for role, sub in ROLE_SUBDIR.items():
-        d = MODELS_DIR / sub
-        files[role] = sorted(f.name for f in d.glob("*.safetensors")) if d.is_dir() else []
     return {
         "models_dir": str(MODELS_DIR),
         "catalog": model_catalog_for(architecture, model_version),
-        "files": files,
+        "files": _library_files(),
+    }
+
+
+@app.get("/api/v1/models/all")
+async def list_all_models():
+    return {
+        "models_dir": str(MODELS_DIR),
+        "architectures": model_catalog_all(),
+        "files": _library_files(),
     }
 
 
 @app.post("/api/v1/models/download")
 async def download_model(req: DownloadRequest):
-    entry = next((c for c in model_catalog_for(req.architecture, req.model_version)
-                  if c["role"] == req.role), None)
+    entry = find_catalog_entry(req.architecture, req.filename)
     if not entry:
-        raise HTTPException(422, f"no catalog entry for {req.architecture}/{req.model_version}/{req.role}")
+        raise HTTPException(422, f"no catalog entry for {req.architecture}/{req.filename}")
     if entry["exists"]:
         return {"status": "exists", **entry}
-    dest = MODELS_DIR / ROLE_SUBDIR[req.role]
+    dest = MODELS_DIR / ROLE_SUBDIR[entry["role"]]
     argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),
             "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest)]
-    job = manager.submit(Job(f"download · {req.role}", req.architecture, entry["filename"], argv))
+    job = manager.submit(Job(f"download · {entry['role']}", req.architecture, entry["filename"], argv))
     return job.summary()
 
 

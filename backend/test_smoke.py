@@ -107,16 +107,26 @@ def test_model_catalog_and_download_validation():
         assert roles["vae"]["filename"] == "qwen_image_vae.safetensors"
         assert all(not c["filename"].count("fp8") for c in r["catalog"])  # 量化版不可训练,不收录
 
-        # layered 变体使用专属 VAE
+        # layered 变体使用专属 VAE;wan 按 task 匹配 DiT(A14B 高低噪双模型)
         r2 = client.get("/api/v1/models",
                         params={"architecture": "qwen-image", "model_version": "layered"}).json()
         assert {c["role"]: c for c in r2["catalog"]}["vae"]["filename"] == "qwen_image_layered_vae.safetensors"
+        r3 = client.get("/api/v1/models",
+                        params={"architecture": "wan2.1/2.2", "model_version": "t2v-A14B"}).json()
+        r3_roles = {c["role"]: c for c in r3["catalog"]}
+        assert r3_roles["dit"]["filename"] == "wan2.2_t2v_low_noise_14B_fp16.safetensors"
+        assert r3_roles["dit_high_noise"]["filename"] == "wan2.2_t2v_high_noise_14B_fp16.safetensors"
 
-        # 未收录架构 → 空清单(不编造);未知 role → 422
-        assert client.get("/api/v1/models", params={"architecture": "krea2"}).json()["catalog"] == []
+        # 全量清单覆盖全部 12 架构,且每个架构至少有 DiT
+        allm = client.get("/api/v1/models/all").json()
+        archs = {g["id"]: g for g in allm["architectures"]}
+        assert len(archs) == 12
+        for g in allm["architectures"]:
+            assert any(e["role"] == "dit" for e in g["entries"]), g["id"]
+
+        # 未知条目 → 422
         assert client.post("/api/v1/models/download",
-                           json={"architecture": "qwen-image", "model_version": "edit-2511",
-                                 "role": "nope"}).status_code == 422
+                           json={"architecture": "qwen-image", "filename": "nope.safetensors"}).status_code == 422
 
 
 def test_validation_and_cancel_queued():

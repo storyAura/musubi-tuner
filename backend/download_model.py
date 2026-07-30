@@ -31,6 +31,10 @@ def main():
 
     got = None
     for endpoint in (None, MIRROR):
+        if endpoint == MIRROR:
+            # hf-mirror 面向直连:剥掉继承的代理(AutoDL 学术加速/Clash),否则镜像也被代理劫持
+            for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
+                os.environ.pop(k, None)
         label = endpoint or "default ($HF_ENDPOINT / huggingface.co)"
         print(f"[download] endpoint {label}", flush=True)
         print(f"[download] {a.repo} :: {a.file}", flush=True)

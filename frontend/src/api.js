@@ -22,9 +22,12 @@ export async function getJson(path) {
 }
 
 export function modelsQuery(values) {
+  // 变体标识按架构取自不同字段:qwen/flux.2 用 model_version,hidream 用 model_type,
+  // wan/hv1.5/kandinsky 用 task(hidream 的 DiT 由 model_type 决定,优先于 task)
+  const variant = values.model_version || values.model_type || values.task || ''
   return '/api/v1/models?' + new URLSearchParams({
     architecture: values.model_arch,
-    model_version: values.model_version || '',
+    model_version: variant,
   }).toString()
 }
 

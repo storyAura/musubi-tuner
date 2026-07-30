@@ -30,7 +30,8 @@ const gpuLabel = computed(() => {
   if (demo.demoMode) return 'RTX 4090 · ' + store.vram.toFixed(1) + '/24 GB (demo)'
   const e = store.env
   if (e.source === 'nvidia') return e.gpuName + ' · ' + e.vramUsedGb.toFixed(1) + '/' + e.vramTotalGb.toFixed(1) + ' GB'
-  if (e.source === 'webgl') return e.gpuName
+  if (e.backend) return 'GPU 未检测' // 训练机无 GPU / 无卡模式;不显示浏览器显卡
+  if (e.source === 'webgl') return e.gpuName + '(浏览器)'
   return 'GPU —'
 })
 

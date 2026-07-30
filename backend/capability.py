@@ -227,50 +227,216 @@ def build_sample_prompt_text(values: dict) -> str | None:
     return " ".join(parts) + "\n"
 
 
-# ---- 模型库(一键下载 + 自动选择) ----
-# 文件名与大小经 hf-mirror API 实测核对(2026-07-31);fp8/nvfp4 量化版不可用于训练,不收录。
-# 官方 docs/qwen_image.md 称 VAE 在 Edit 仓库,实测该仓库无 vae 目录,真实位置为 Qwen-Image_ComfyUI。
+# ---- 模型库(全 12 架构清单 + 一键下载 + 自动选择) ----
+# 所有文件名与大小均经 hf-mirror/HF API 实测核对(2026-07-31),不收录纯猜测条目;
+# fp8/nvfp4 量化版不可用于训练故不收录(Ideogram4 例外:官方仅发布 fp8_scaled)。
+# 官方文档两处笔误已按实测纠正:Qwen VAE 实际在 Qwen-Image_ComfyUI;
+# FLUX.2 klein 文件名为 flux-2-klein-*(文档误写 flux2-klein-*)。
 MODELS_DIR = REPO_ROOT / "models"
-ROLE_SUBDIR = {"dit": "diffusion_models", "text_encoder": "text_encoders", "vae": "vae"}
+ROLE_SUBDIR = {
+    "dit": "diffusion_models", "dit_high_noise": "diffusion_models", "unconditional_dit": "diffusion_models",
+    "text_encoder": "text_encoders", "text_encoder2": "text_encoders", "byt5": "text_encoders",
+    "clip": "text_encoders", "vae": "vae", "image_encoder": "clip_vision",
+}
 
 _QWEN = "Comfy-Org/Qwen-Image_ComfyUI"
 _QWEN_EDIT = "Comfy-Org/Qwen-Image-Edit_ComfyUI"
 _QWEN_LAYERED = "Comfy-Org/Qwen-Image-Layered_ComfyUI"
+_HV_PACK = "Comfy-Org/HunyuanVideo_repackaged"
+_WAN21 = "Comfy-Org/Wan_2.1_ComfyUI_repackaged"
+_WAN22 = "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+_WAN_AI = "Wan-AI/Wan2.1-I2V-14B-720P"
+_HV15 = "tencent/HunyuanVideo-1.5"
+_HV15_PACK = "Comfy-Org/HunyuanVideo_1.5_repackaged"
+_GATED = "BFL gated 仓库:需在 HF 页面接受协议并配置 token,下载失败时请手动下载"
 
-# {arch: {role: {variant|"*": (repo, remote_file, size_mb)}}};其余架构待逐个核对 docs 后补充
-MODEL_CATALOG: dict[str, dict[str, dict[str, tuple[str, str, int]]]] = {
-    "qwen-image": {
-        "dit": {
-            "original": (_QWEN, "split_files/diffusion_models/qwen_image_bf16.safetensors", 38968),
-            "edit": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_bf16.safetensors", 38968),
-            "edit-2509": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_2509_bf16.safetensors", 38968),
-            "edit-2511": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors", 38968),
-            "layered": (_QWEN_LAYERED, "split_files/diffusion_models/qwen_image_layered_bf16.safetensors", 38968),
-        },
-        "text_encoder": {"*": (_QWEN, "split_files/text_encoders/qwen_2.5_vl_7b.safetensors", 15816)},
-        "vae": {
-            "*": (_QWEN, "split_files/vae/qwen_image_vae.safetensors", 242),
-            "layered": (_QWEN_LAYERED, "split_files/vae/qwen_image_layered_vae.safetensors", 242),
-        },
-    },
+# 条目:role, repo, file, size_mb;可选 variants(适用变体,缺省=全部)、note、optional
+MODEL_CATALOG: dict[str, list[dict]] = {
+    "hunyuan-video": [
+        dict(role="dit", repo="tencent/HunyuanVideo",
+             file="hunyuan-video-t2v-720p/transformers/mp_rank_00_model_states.pt", size_mb=24454),
+        dict(role="vae", repo="tencent/HunyuanVideo",
+             file="hunyuan-video-t2v-720p/vae/pytorch_model.pt", size_mb=940),
+        dict(role="text_encoder", repo=_HV_PACK,
+             file="split_files/text_encoders/llava_llama3_fp16.safetensors", size_mb=15326),
+        dict(role="text_encoder2", repo=_HV_PACK,
+             file="split_files/text_encoders/clip_l.safetensors", size_mb=234),
+    ],
+    "wan2.1/2.2": [
+        dict(role="dit", repo=_WAN21, file="split_files/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors",
+             size_mb=2706, variants=["t2v-1.3B"]),
+        dict(role="dit", repo=_WAN21, file="split_files/diffusion_models/wan2.1_t2v_14B_bf16.safetensors",
+             size_mb=27253, variants=["t2v-14B", "t2i-14B"]),
+        dict(role="dit", repo=_WAN21, file="split_files/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors",
+             size_mb=31270, variants=["i2v-14B"]),
+        dict(role="dit", repo=_WAN21, file="split_files/diffusion_models/wan2.1_flf2v_720p_14B_fp16.safetensors",
+             size_mb=31273, variants=["flf2v-14B"]),
+        dict(role="dit", repo=_WAN22, file="split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp16.safetensors",
+             size_mb=27253, variants=["t2v-A14B"]),
+        dict(role="dit_high_noise", repo=_WAN22,
+             file="split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp16.safetensors",
+             size_mb=27253, variants=["t2v-A14B"]),
+        dict(role="dit", repo=_WAN22, file="split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors",
+             size_mb=27254, variants=["i2v-A14B"]),
+        dict(role="dit_high_noise", repo=_WAN22,
+             file="split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors",
+             size_mb=27254, variants=["i2v-A14B"]),
+        dict(role="text_encoder", repo=_WAN_AI, file="models_t5_umt5-xxl-enc-bf16.pth", size_mb=10835,
+             note="T5(--t5)"),
+        dict(role="clip", repo=_WAN_AI, file="models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
+             size_mb=4551, note="Wan2.1 I2V 训练需要;2.2 不需要", optional=True),
+        dict(role="vae", repo=_WAN21, file="split_files/vae/wan_2.1_vae.safetensors", size_mb=242),
+    ],
+    "framepack": [
+        dict(role="dit", repo="Kijai/HunyuanVideo_comfy", file="FramePackI2V_HY_bf16.safetensors", size_mb=24555),
+        dict(role="vae", repo="hunyuanvideo-community/HunyuanVideo",
+             file="vae/diffusion_pytorch_model.safetensors", size_mb=940),
+        dict(role="text_encoder", repo=_HV_PACK,
+             file="split_files/text_encoders/llava_llama3_fp16.safetensors", size_mb=15326),
+        dict(role="text_encoder2", repo=_HV_PACK,
+             file="split_files/text_encoders/clip_l.safetensors", size_mb=234),
+        dict(role="image_encoder", repo="Comfy-Org/sigclip_vision_384",
+             file="sigclip_vision_patch14_384.safetensors", size_mb=816),
+    ],
+    "hunyuan-video-1.5": [
+        dict(role="dit", repo=_HV15, file="transformer/720p_t2v/diffusion_pytorch_model.safetensors",
+             size_mb=31763, variants=["t2v"]),
+        dict(role="dit", repo=_HV15, file="transformer/720p_i2v/diffusion_pytorch_model.safetensors",
+             size_mb=31763, variants=["i2v"]),
+        dict(role="vae", repo=_HV15, file="vae/diffusion_pytorch_model.safetensors", size_mb=4808),
+        dict(role="text_encoder", repo=_HV15_PACK,
+             file="split_files/text_encoders/qwen_2.5_vl_7b.safetensors", size_mb=15816),
+        dict(role="byt5", repo=_HV15_PACK,
+             file="split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors", size_mb=418),
+        dict(role="image_encoder", repo=_HV15_PACK,
+             file="split_files/clip_vision/sigclip_vision_patch14_384.safetensors", size_mb=816,
+             variants=["i2v"], note="I2V 需要"),
+    ],
+    "flux.1-kontext": [
+        dict(role="dit", repo="black-forest-labs/FLUX.1-Kontext-dev", file="flux1-kontext-dev.safetensors",
+             size_mb=22700, note=_GATED),
+        dict(role="vae", repo="black-forest-labs/FLUX.1-Kontext-dev", file="ae.safetensors",
+             size_mb=319, note=_GATED),
+        dict(role="text_encoder", repo="comfyanonymous/flux_text_encoders",
+             file="t5xxl_fp16.safetensors", size_mb=9334, note="T5-XXL(--text_encoder1)"),
+        dict(role="text_encoder2", repo="comfyanonymous/flux_text_encoders",
+             file="clip_l.safetensors", size_mb=234),
+    ],
+    "flux.2": [
+        dict(role="dit", repo="black-forest-labs/FLUX.2-dev", file="flux2-dev.safetensors",
+             size_mb=61461, variants=["dev"], note=_GATED),
+        dict(role="dit", repo="black-forest-labs/FLUX.2-klein-4B", file="flux-2-klein-4b.safetensors",
+             size_mb=7392, variants=["klein-4b"]),
+        dict(role="dit", repo="black-forest-labs/FLUX.2-klein-base-4B", file="flux-2-klein-base-4b.safetensors",
+             size_mb=7392, variants=["klein-base-4b"]),
+        dict(role="dit", repo="black-forest-labs/FLUX.2-klein-9B", file="flux-2-klein-9b.safetensors",
+             size_mb=17316, variants=["klein-9b"]),
+        dict(role="dit", repo="black-forest-labs/FLUX.2-klein-base-9B", file="flux-2-klein-base-9b.safetensors",
+             size_mb=17316, variants=["klein-base-9b"]),
+        dict(role="vae", repo="black-forest-labs/FLUX.2-dev", file="ae.safetensors", size_mb=320, note=_GATED),
+        dict(role="text_encoder", repo="Comfy-Org/z_image",
+             file="split_files/text_encoders/qwen_3_4b.safetensors", size_mb=7672,
+             variants=["klein-4b", "klein-base-4b"], note="Qwen3 4B,与 Z-Image 共用"),
+    ],
+    "qwen-image": [
+        dict(role="dit", repo=_QWEN, file="split_files/diffusion_models/qwen_image_bf16.safetensors",
+             size_mb=38968, variants=["original"]),
+        dict(role="dit", repo=_QWEN_EDIT, file="split_files/diffusion_models/qwen_image_edit_bf16.safetensors",
+             size_mb=38968, variants=["edit"]),
+        dict(role="dit", repo=_QWEN_EDIT, file="split_files/diffusion_models/qwen_image_edit_2509_bf16.safetensors",
+             size_mb=38968, variants=["edit-2509"]),
+        dict(role="dit", repo=_QWEN_EDIT, file="split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors",
+             size_mb=38968, variants=["edit-2511"]),
+        dict(role="dit", repo=_QWEN_LAYERED, file="split_files/diffusion_models/qwen_image_layered_bf16.safetensors",
+             size_mb=38968, variants=["layered"]),
+        dict(role="text_encoder", repo=_QWEN, file="split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+             size_mb=15816),
+        dict(role="vae", repo=_QWEN, file="split_files/vae/qwen_image_vae.safetensors", size_mb=242,
+             variants=["original", "edit", "edit-2509", "edit-2511"]),
+        dict(role="vae", repo=_QWEN_LAYERED, file="split_files/vae/qwen_image_layered_vae.safetensors",
+             size_mb=242, variants=["layered"]),
+    ],
+    "z-image": [
+        dict(role="dit", repo="Comfy-Org/z_image", file="split_files/diffusion_models/z_image_bf16.safetensors",
+             size_mb=11739),
+        dict(role="vae", repo="Comfy-Org/z_image", file="split_files/vae/ae.safetensors", size_mb=319),
+        dict(role="text_encoder", repo="Comfy-Org/z_image",
+             file="split_files/text_encoders/qwen_3_4b.safetensors", size_mb=7672),
+    ],
+    "hidream-o1": [
+        dict(role="dit", repo="Comfy-Org/HiDream-O1-Image", file="checkpoints/hidream_o1_image_bf16.safetensors",
+             size_mb=15607, variants=["full"]),
+        dict(role="dit", repo="Comfy-Org/HiDream-O1-Image",
+             file="checkpoints/hidream_o1_image_dev_bf16.safetensors", size_mb=15607, variants=["dev"],
+             note="统一模型:无独立 VAE/TE,文本缓存亦从 DiT 加载"),
+    ],
+    "ideogram4": [
+        dict(role="dit", repo="Comfy-Org/Ideogram-4", file="diffusion_models/ideogram4_fp8_scaled.safetensors",
+             size_mb=8850, note="官方仅发布 fp8_scaled 格式"),
+        dict(role="unconditional_dit", repo="Comfy-Org/Ideogram-4",
+             file="diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors", size_mb=8850,
+             optional=True, note="推理/非对称 CFG 用"),
+        dict(role="text_encoder", repo="Comfy-Org/Ideogram-4",
+             file="text_encoders/qwen3vl_8b_fp8_scaled.safetensors", size_mb=10098),
+        dict(role="vae", repo="Comfy-Org/Ideogram-4", file="vae/flux2-vae.safetensors", size_mb=320),
+    ],
+    "kandinsky5": [
+        dict(role="dit", repo="kandinskylab/Kandinsky-5.0-T2V-Pro-sft-5s",
+             file="model/kandinsky5pro_t2v_sft_5s.safetensors", size_mb=41376,
+             variants=["k5-pro-t2v-5s-sd", "k5-pro-t2v-5s-hd"],
+             note="其余 task 的 DiT 见 kandinskylab collection 各仓库 model/ 目录"),
+        dict(role="vae", repo="hunyuanvideo-community/HunyuanVideo",
+             file="vae/diffusion_pytorch_model.safetensors", size_mb=940),
+    ],
+    "krea2": [
+        dict(role="dit", repo="krea/Krea-2-Raw", file="raw.safetensors", size_mb=25065, note="RAW,训练用"),
+        dict(role="dit", repo="krea/Krea-2-Turbo", file="turbo.safetensors", size_mb=25065,
+             optional=True, note="Turbo(--turbo_dit),推理/采样用"),
+        dict(role="vae", repo=_QWEN, file="split_files/vae/qwen_image_vae.safetensors", size_mb=242,
+             note="与 Qwen-Image 共用"),
+        dict(role="text_encoder", repo="Comfy-Org/Qwen3-VL",
+             file="text_encoders/qwen3vl_4b_bf16.safetensors", size_mb=8464),
+    ],
 }
+# 单文件形式不存在、需手动准备的组件(如实列出,不提供假下载):
+# - FLUX.2 dev 的 Mistral 3 TE 与 klein-9b 系 TE:官方仓库多分片
+# - Kandinsky5 的 Qwen2.5-VL / CLIP:HF 目录格式
+# - Wan Fun-Control(FC 变体)DiT:alibaba-pai 仓库多分片
+
+
+def _entry_public(arch: str, e: dict) -> dict:
+    filename = e["file"].rsplit("/", 1)[-1]
+    local = MODELS_DIR / ROLE_SUBDIR[e["role"]] / filename
+    return {
+        "architecture": arch, "role": e["role"], "filename": filename,
+        "repo": e["repo"], "remote_file": e["file"], "size_mb": e["size_mb"],
+        "variants": e.get("variants"), "note": e.get("note", ""), "optional": bool(e.get("optional")),
+        "exists": local.is_file(), "local_path": str(local),
+    }
 
 
 def model_catalog_for(arch: str, variant: str) -> list[dict]:
-    """该架构+变体的推荐模型清单,附本地存在性(models/<role子目录>/<文件名>)。"""
+    """该架构+当前变体适用的清单(变体不匹配的条目不出现)。"""
     out = []
-    for role, table in MODEL_CATALOG.get(arch, {}).items():
-        entry = table.get(variant) or table.get("*")
-        if not entry:
+    for e in MODEL_CATALOG.get(arch, []):
+        vs = e.get("variants")
+        if vs is not None and variant not in vs:
             continue
-        repo, remote_file, size_mb = entry
-        filename = remote_file.rsplit("/", 1)[-1]
-        local = MODELS_DIR / ROLE_SUBDIR[role] / filename
-        out.append({
-            "role": role, "filename": filename, "repo": repo, "remote_file": remote_file,
-            "size_mb": size_mb, "exists": local.is_file(), "local_path": str(local),
-        })
+        out.append(_entry_public(arch, e))
     return out
+
+
+def model_catalog_all() -> list[dict]:
+    """全部架构的完整清单(按架构分组)。"""
+    return [{"id": arch, "entries": [_entry_public(arch, e) for e in entries]}
+            for arch, entries in MODEL_CATALOG.items()]
+
+
+def find_catalog_entry(arch: str, filename: str) -> dict | None:
+    for e in MODEL_CATALOG.get(arch, []):
+        if e["file"].rsplit("/", 1)[-1] == filename:
+            return _entry_public(arch, e)
+    return None
 
 
 def capabilities_payload() -> dict:

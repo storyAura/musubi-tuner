@@ -54,6 +54,8 @@ export const store = reactive({
   },
   // 训练器模型库(models/ 目录):当前架构+变体的推荐清单与目录内现有文件
   modelLib: { dir: '', catalog: [], files: {}, checked: false },
+  // 全部 12 架构的完整模型清单(模型页「全部模型」区)
+  modelLibAll: { architectures: [], checked: false },
   values: {
     project_dir: '',
     model_arch: 'qwen-image',
@@ -193,13 +195,19 @@ export async function refreshModels(autoFill = true) {
   }
 }
 
-export async function downloadModel(role) {
+export async function loadAllModels() {
+  if (demo.demoMode) return
   try {
-    const job = await postJson('/api/v1/models/download', {
-      architecture: store.values.model_arch,
-      model_version: store.values.model_version || '',
-      role,
-    })
+    const data = await getJson('/api/v1/models/all')
+    store.modelLibAll = { architectures: data.architectures, checked: true }
+  } catch {
+    store.modelLibAll = { ...store.modelLibAll, checked: false }
+  }
+}
+
+export async function downloadModel(architecture, filename) {
+  try {
+    const job = await postJson('/api/v1/models/download', { architecture, filename })
     if (job.status === 'exists') {
       toast('info', '模型已在库中 · ' + job.filename)
       refreshModels()
@@ -417,6 +425,7 @@ function handleRealStatus(ev) {
   finishJob(st, store.step)
   if (esHandle) { esHandle.close(); esHandle = null }
   refreshModels() // 下载/训练结束后刷新模型库(下载完成的模型自动选入表单)
+  loadAllModels()
 }
 
 function beginRun() {
@@ -720,10 +729,8 @@ async function probeEnv() {
     await fetchEnv()
     clearInterval(envTimer)
     envTimer = setInterval(() => fetchEnv().catch(() => { store.env.backend = false }), 5000) // 5s 一刷
-    if (store.env.source !== 'nvidia') {
-      const name = webglGpuName()
-      if (name) store.env = { ...store.env, gpuName: name, source: 'webgl' }
-    }
+    // 后端已连接时以后端报告为准:无 GPU 就如实显示未检测,
+    // 绝不用 WebGL 补——那读到的是访问者浏览器的显卡,不是训练机的
     log('ink', 'backend connected · python ' + (store.env.python || '?') +
       ' · torch ' + (store.env.torch || '未安装') + ' · accelerate ' + (store.env.accelerate || '未安装'))
   } catch {
