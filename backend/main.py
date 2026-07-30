@@ -28,6 +28,7 @@ from .capability import (
     model_catalog_all, model_catalog_for, render_cache_argv, render_train_argv,
 )
 from .jobs import Job, manager
+from . import settings as settings_store
 
 RUNTIME_DIR = Path(__file__).resolve().parent / ".runtime"
 
@@ -105,6 +106,27 @@ def capabilities():
     return capabilities_payload()
 
 
+# ---- 设置(token 脱敏、下载线路等;存于训练机 backend/.runtime/settings.json) ----
+
+class SettingsPatch(BaseModel):
+    hf_token: str | None = None
+    modelscope_token: str | None = None
+    download_route: str | None = None
+
+
+@app.get("/api/v1/settings")
+async def get_settings():
+    return settings_store.redacted()
+
+
+@app.put("/api/v1/settings")
+async def put_settings(patch: SettingsPatch):
+    data = patch.model_dump(exclude_unset=True)
+    if "download_route" in data and data["download_route"] not in settings_store.ROUTES:
+        raise HTTPException(422, f"invalid download_route {data['download_route']!r}")
+    return settings_store.update(data)
+
+
 # ---- 模型库 ----
 
 class DownloadRequest(BaseModel):
@@ -146,8 +168,10 @@ async def download_model(req: DownloadRequest):
     if entry["exists"]:
         return {"status": "exists", **entry}
     dest = MODELS_DIR / ROLE_SUBDIR[entry["role"]]
+    route = settings_store.load().get("download_route", "auto")
     argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),
-            "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest)]
+            "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest),
+            "--route", route]
     job = manager.submit(Job(f"download · {entry['role']}", req.architecture, entry["filename"], argv))
     return job.summary()
 

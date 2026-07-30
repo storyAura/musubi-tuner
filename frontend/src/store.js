@@ -2,7 +2,7 @@
 // 训练流程当前为假数据模拟;交互语义(作业状态机、缓存删除确认、argv 脱敏)
 // 按 MUSUBI_TUNER_UI_ADAPTATION_HANDOFF.md 的 API 契约设计,后续替换为真实后端调用。
 import { reactive } from 'vue'
-import { getJson, modelsQuery, postJson, subscribeJobEvents, trainPayloadValues } from './api.js'
+import { getJson, modelsQuery, postJson, putJson, subscribeJobEvents, trainPayloadValues } from './api.js'
 
 // ---- 运行配置(URL query) ----
 // 默认为真实模式:无假数据、无模拟训练,未实现的提交动作明确提示「后端未连接」。
@@ -58,6 +58,11 @@ export const store = reactive({
   modelLibAll: { architectures: [], checked: false },
   // 进行中的模型下载(独立于训练状态机):filename → { jobId, status }
   downloads: {},
+  // 后端设置(token 一律脱敏,只有 *_set / *_hint;明文只存训练机本地)
+  settings: {
+    loaded: false, download_route: 'auto',
+    hf_token_set: false, hf_token_hint: '', modelscope_token_set: false, modelscope_token_hint: '',
+  },
   values: {
     project_dir: '',
     model_arch: 'qwen-image',
@@ -254,6 +259,30 @@ function attachDownloadJob(jobId, filename) {
     refreshModels()
     loadAllModels()
   })
+}
+
+// ---- 设置 ----
+
+export async function loadSettings() {
+  if (demo.demoMode) return
+  try {
+    const d = await getJson('/api/v1/settings')
+    store.settings = { ...store.settings, ...d, loaded: true }
+  } catch {
+    store.settings = { ...store.settings, loaded: false }
+  }
+}
+
+export async function saveSettings(patch) {
+  try {
+    const d = await putJson('/api/v1/settings', patch)
+    store.settings = { ...store.settings, ...d, loaded: true }
+    toast('info', '设置已保存')
+    return true
+  } catch (err) {
+    toast('error', '保存失败 · ' + err.message)
+    return false
+  }
 }
 
 export function cancelDownload(filename) {
@@ -830,6 +859,7 @@ export function init() {
   }
   probeEnv()
   refreshModels()
+  loadSettings()
 }
 
 export function destroy() {

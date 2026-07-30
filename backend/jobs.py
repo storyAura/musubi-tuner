@@ -137,6 +137,8 @@ class JobManager:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(REPO_ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        from .settings import token_env
+        env.update(token_env())  # 秘密走环境变量,不进 argv 与日志
         flags = 0
         if os.name == "nt":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW

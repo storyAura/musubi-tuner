@@ -43,7 +43,8 @@ describe('musubi tuner frontend', () => {
     const w = mount(App, { attachTo: document.body })
     const cases = [
       ['models', '模型库'], ['queue', '作业队列'], ['artifacts', '产物库'],
-      ['env', '环境与设备'], ['presets', '预设与 TOML'], ['train', '训练配置'],
+      ['env', '环境与设备'], ['presets', '预设与 TOML'], ['settings', 'Token 明文只保存在训练机本地'],
+      ['train', '训练配置'],
     ]
     for (const [page, title] of cases) {
       store.page = page

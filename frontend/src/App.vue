@@ -15,6 +15,7 @@ import QueuePage from './pages/QueuePage.vue'
 import ArtifactsPage from './pages/ArtifactsPage.vue'
 import EnvironmentPage from './pages/EnvironmentPage.vue'
 import PresetsPage from './pages/PresetsPage.vue'
+import SettingsPage from './pages/SettingsPage.vue'
 
 onMounted(init)
 onUnmounted(destroy)
@@ -74,11 +75,12 @@ const nav = computed(() => [
   ['artifacts', '产物', String(store.extraArtifacts.length + (demo.demoMode ? 5 : 0))],
   ['env', '环境', ''],
   ['presets', '预设', demo.demoMode ? '4' : '0'],
+  ['settings', '设置', ''],
 ].map(n => ({ key: n[0], label: n[1], count: n[2], active: store.page === n[0] })))
 
 const PAGES = {
   train: TrainPage, models: ModelsPage, queue: QueuePage,
-  artifacts: ArtifactsPage, env: EnvironmentPage, presets: PresetsPage,
+  artifacts: ArtifactsPage, env: EnvironmentPage, presets: PresetsPage, settings: SettingsPage,
 }
 const page = computed(() => PAGES[store.page] || TrainPage)
 </script>

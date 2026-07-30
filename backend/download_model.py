@@ -61,11 +61,23 @@ def modelscope_download(repo: str, file: str, final: Path) -> None:
     part.rename(final)
 
 
+ROUTE_SOURCES = {
+    "auto": ["hf", "mirror", "modelscope"],
+    "hf": ["hf"], "mirror": ["mirror"], "modelscope": ["modelscope"],
+}
+SOURCE_LABEL = {
+    "hf": "default ($HF_ENDPOINT / huggingface.co)",
+    "mirror": MIRROR,
+    "modelscope": "https://modelscope.cn (魔搭)",
+}
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--repo", required=True)
     p.add_argument("--file", required=True)
     p.add_argument("--dest", required=True)
+    p.add_argument("--route", default="auto", choices=sorted(ROUTE_SOURCES))
     a = p.parse_args()
 
     # Xet 存储协议经代理(AutoDL 学术加速/Clash)常见 401,禁用后回退传统 HTTP 下载
@@ -76,32 +88,25 @@ def main():
     tmp = dest / ".hf_partial"
     final = dest / a.file.rsplit("/", 1)[-1]
 
-    for endpoint in (None, MIRROR):
-        if endpoint == MIRROR:
-            strip_proxies()  # hf-mirror 面向直连,继承代理会劫持它
-        label = endpoint or "default ($HF_ENDPOINT / huggingface.co)"
-        print(f"[download] endpoint {label}", flush=True)
+    for src in ROUTE_SOURCES[a.route]:
+        print(f"[download] endpoint {SOURCE_LABEL[src]}", flush=True)
         print(f"[download] {a.repo} :: {a.file}", flush=True)
         try:
-            got = hf_download(a.repo, a.file, tmp, endpoint)
-            shutil.move(got, final)
-            shutil.rmtree(tmp, ignore_errors=True)
+            if src == "modelscope":
+                strip_proxies()  # 魔搭国内直连
+                modelscope_download(a.repo, a.file, final)
+            else:
+                if src == "mirror":
+                    strip_proxies()  # hf-mirror 面向直连,继承代理会劫持它
+                got = hf_download(a.repo, a.file, tmp, MIRROR if src == "mirror" else None)
+                shutil.move(got, final)
+                shutil.rmtree(tmp, ignore_errors=True)
             print(f"[download] saved {final}", flush=True)
             return
-        except Exception as e:  # noqa: BLE001 — 逐端点回退
+        except Exception as e:  # noqa: BLE001 — 逐线路回退
             print(f"[download] endpoint failed · {type(e).__name__}: {str(e)[:200]}", flush=True)
 
-    strip_proxies()  # 魔搭国内直连
-    print("[download] endpoint https://modelscope.cn (魔搭)", flush=True)
-    print(f"[download] {a.repo} :: {a.file}", flush=True)
-    try:
-        modelscope_download(a.repo, a.file, final)
-        print(f"[download] saved {final}", flush=True)
-        return
-    except Exception as e:  # noqa: BLE001
-        print(f"[download] endpoint failed · {type(e).__name__}: {str(e)[:200]}", flush=True)
-
-    print("ERROR: all endpoints failed — HF(direct/mirror) and ModelScope", flush=True)
+    print(f"ERROR: all endpoints failed (route={a.route}) — 可在设置页切换下载线路或配置 token", flush=True)
     sys.exit(1)
 
 

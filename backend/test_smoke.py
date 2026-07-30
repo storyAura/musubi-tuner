@@ -129,6 +129,26 @@ def test_model_catalog_and_download_validation():
                            json={"architecture": "qwen-image", "filename": "nope.safetensors"}).status_code == 422
 
 
+def test_settings_roundtrip_and_redaction():
+    import json as _json
+    with TestClient(app) as client:
+        r = client.put("/api/v1/settings",
+                       json={"hf_token": "hf_secretvalue12345678", "download_route": "modelscope"}).json()
+        assert r["hf_token_set"] is True
+        assert r["hf_token_hint"].endswith("5678")
+        assert "hf_secretvalue" not in _json.dumps(r)  # 明文绝不回传
+
+        g = client.get("/api/v1/settings").json()
+        assert g["download_route"] == "modelscope"
+        assert "hf_token" not in g  # 只有 _set/_hint,无原值字段
+
+        assert client.put("/api/v1/settings", json={"download_route": "bogus"}).status_code == 422
+
+        # 清除并复位(不留测试残留)
+        r2 = client.put("/api/v1/settings", json={"hf_token": "", "download_route": "auto"}).json()
+        assert r2["hf_token_set"] is False and r2["download_route"] == "auto"
+
+
 def test_validation_and_cancel_queued():
     with TestClient(app) as client:
         r = client.post("/api/v1/jobs/train", json={"architecture": "qwen-image", "values": {}})

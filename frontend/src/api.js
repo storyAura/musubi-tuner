@@ -21,6 +21,20 @@ export async function getJson(path) {
   return r.json()
 }
 
+export async function putJson(path, body) {
+  const r = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  })
+  if (!r.ok) {
+    let detail = ''
+    try { detail = (await r.json()).detail || '' } catch { /* 非 JSON 错误体 */ }
+    throw new Error(detail || 'HTTP ' + r.status)
+  }
+  return r.json()
+}
+
 export function modelsQuery(values) {
   // 变体标识按架构取自不同字段:qwen/flux.2 用 model_version,hidream 用 model_type,
   // wan/hv1.5/kandinsky 用 task(hidream 的 DiT 由 model_type 决定,优先于 task)
