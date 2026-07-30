@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .capability import (
@@ -226,3 +227,10 @@ async def job_events(job_id: str):
         manager.sse_stream(job), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---- 静态托管前端(单进程部署:构建产物存在时,同端口同时提供界面与 API) ----
+# 用法:frontend 下 `npm run build` 后,uvicorn backend.main:app --host 0.0.0.0 --port 6006
+_FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
+if _FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIST), html=True), name="frontend")
