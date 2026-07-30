@@ -1,0 +1,48 @@
+// 后端 API 客户端(/api/v1/*,开发下由 vite proxy 转发到 127.0.0.1:8787)。
+// 只做传输,不持有状态;事件通过回调交给 store。
+
+export async function postJson(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  })
+  if (!r.ok) {
+    let detail = ''
+    try { detail = (await r.json()).detail || '' } catch { /* 非 JSON 错误体 */ }
+    throw new Error(detail || 'HTTP ' + r.status)
+  }
+  return r.json()
+}
+
+export async function getJson(path) {
+  const r = await fetch(path)
+  if (!r.ok) throw new Error('HTTP ' + r.status)
+  return r.json()
+}
+
+// SSE 订阅;返回带 close() 的句柄。终态后服务端关流,onerror 里静默关闭。
+export function subscribeJobEvents(jobId, onEvent) {
+  const es = new EventSource('/api/v1/jobs/' + jobId + '/events')
+  es.onmessage = e => {
+    try { onEvent(JSON.parse(e.data)) } catch { /* 忽略坏帧 */ }
+  }
+  es.onerror = () => { es.close() }
+  return es
+}
+
+// 提交训练时剔除秘密与仅属于 UI/数据集 TOML 的字段;后端另有白名单二次把关
+const OMIT_KEYS = new Set([
+  'wandb_api_key', 'huggingface_token', 'huggingface_repo_id', 'async_upload',
+  'project_dir', 'model_arch', 'workflow',
+  'resolution_w', 'resolution_h', 'batch_size', 'num_repeats',
+  'enable_bucket', 'bucket_no_upscale', 'caption_extension', 'cache_directory',
+])
+
+export function trainPayloadValues(values) {
+  const out = {}
+  for (const [k, v] of Object.entries(values)) {
+    if (!OMIT_KEYS.has(k)) out[k] = v
+  }
+  return out
+}

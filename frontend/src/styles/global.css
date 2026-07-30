@@ -1,0 +1,107 @@
+/* 设计 token 与全局样式 — 依据《LoRA训练器UI设计规范.md》(Vercel 体系黑白极简) */
+:root {
+  --canvas: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f5f5f5;
+  --hairline: #ebebeb;
+  --hairline-strong: #a1a1a1;
+  --ink: #171717;
+  --body: #4d4d4d;
+  --mute: #888888;
+  --primary: #171717;
+  --on-primary: #ffffff;
+  --accent: #0070f3;
+  --accent-deep: #0761d1;
+  --accent-soft: #d3e5ff;
+  --error: #ee0000;
+  --error-soft: #f7d4d6;
+  --warning: #f5a623;
+  --warning-soft: #ffefcf;
+  --terminal-bg: #171717;
+  --terminal-ink: #ededed;
+  --chart-raw: #c9c9c9;
+  --font-sans: Inter, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --shadow-card: 0 0 0 1px rgba(0, 0, 0, .08);
+  --shadow-float: 0 1px 1px rgba(0, 0, 0, .02), 0 2px 2px rgba(0, 0, 0, .04), 0 0 0 1px rgba(0, 0, 0, .08);
+  --shadow-modal: 0 8px 16px -4px rgba(0, 0, 0, .04), 0 24px 32px -8px rgba(0, 0, 0, .06), 0 0 0 1px rgba(0, 0, 0, .08);
+  --focus-ring: rgba(0, 0, 0, .06);
+}
+:root[data-theme="dark"] {
+  --canvas: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #141414;
+  --hairline: #262626;
+  --hairline-strong: #444444;
+  --ink: #ededed;
+  --body: #a1a1a1;
+  --mute: #707070;
+  --primary: #ededed;
+  --on-primary: #0a0a0a;
+  --accent: #3291ff;
+  --accent-deep: #5aa9ff;
+  --accent-soft: #0b2a4a;
+  --error: #ff6166;
+  --error-soft: #3a1417;
+  --warning: #ffb224;
+  --warning-soft: #3a2708;
+  --terminal-bg: #0a0a0a;
+  --chart-raw: #3a3a3a;
+  --shadow-card: 0 0 0 1px #262626;
+  --shadow-float: 0 0 0 1px #262626;
+  --shadow-modal: 0 0 0 1px #262626, 0 16px 32px rgba(0, 0, 0, .5);
+  --focus-ring: rgba(255, 255, 255, .08);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-deep); }
+input, select, button, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* hover / active 态(原型 style-hover / style-active 的 class 化;需覆盖内联样式故用 !important) */
+.hv-line:hover { border-color: var(--hairline-strong) !important; color: var(--ink) !important; }
+.hv-border:hover { border-color: var(--hairline-strong) !important; }
+.hv-fade:hover { opacity: .86; }
+.hv-fade:active { transform: translateY(1px); }
+.hv-danger:hover { background: var(--error) !important; color: #fff !important; }
+.hv-row:hover { background: var(--surface-2) !important; }
+.hv-nav:hover { background: var(--surface-2) !important; color: var(--ink) !important; }
+.hv-ink:hover { color: var(--ink) !important; }
+
+@keyframes breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.82); } }
+@keyframes lineIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes tileIn { from { opacity: 0; transform: scale(.94) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pageFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes tailPulse { 0%, 100% { box-shadow: 0 0 0 0 var(--accent); opacity: 1; } 50% { box-shadow: 0 0 0 5px rgba(50, 145, 255, 0); opacity: .9; } }
+@keyframes bump { 0% { transform: translateY(2px); opacity: .55; } 100% { transform: none; opacity: 1; } }
+@keyframes stripe { from { background-position: 0 0; } to { background-position: 24px 0; } }
