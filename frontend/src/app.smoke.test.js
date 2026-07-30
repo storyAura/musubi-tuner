@@ -42,8 +42,8 @@ describe('musubi tuner frontend', () => {
   it('五个页面都能切换渲染', async () => {
     const w = mount(App, { attachTo: document.body })
     const cases = [
-      ['queue', '作业队列'], ['artifacts', '产物库'], ['env', '环境与设备'],
-      ['presets', '预设与 TOML'], ['train', '训练配置'],
+      ['models', '模型库'], ['queue', '作业队列'], ['artifacts', '产物库'],
+      ['env', '环境与设备'], ['presets', '预设与 TOML'], ['train', '训练配置'],
     ]
     for (const [page, title] of cases) {
       store.page = page

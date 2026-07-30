@@ -97,6 +97,28 @@ def test_real_subprocess_job_lifecycle():
         assert "process started" in body
 
 
+def test_model_catalog_and_download_validation():
+    with TestClient(app) as client:
+        r = client.get("/api/v1/models",
+                       params={"architecture": "qwen-image", "model_version": "edit-2511"}).json()
+        roles = {c["role"]: c for c in r["catalog"]}
+        assert roles["dit"]["filename"] == "qwen_image_edit_2511_bf16.safetensors"
+        assert roles["text_encoder"]["filename"] == "qwen_2.5_vl_7b.safetensors"
+        assert roles["vae"]["filename"] == "qwen_image_vae.safetensors"
+        assert all(not c["filename"].count("fp8") for c in r["catalog"])  # 量化版不可训练,不收录
+
+        # layered 变体使用专属 VAE
+        r2 = client.get("/api/v1/models",
+                        params={"architecture": "qwen-image", "model_version": "layered"}).json()
+        assert {c["role"]: c for c in r2["catalog"]}["vae"]["filename"] == "qwen_image_layered_vae.safetensors"
+
+        # 未收录架构 → 空清单(不编造);未知 role → 422
+        assert client.get("/api/v1/models", params={"architecture": "krea2"}).json()["catalog"] == []
+        assert client.post("/api/v1/models/download",
+                           json={"architecture": "qwen-image", "model_version": "edit-2511",
+                                 "role": "nope"}).status_code == 422
+
+
 def test_validation_and_cancel_queued():
     with TestClient(app) as client:
         r = client.post("/api/v1/jobs/train", json={"architecture": "qwen-image", "values": {}})

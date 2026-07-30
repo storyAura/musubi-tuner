@@ -10,6 +10,7 @@ import StatusBadge from './components/StatusBadge.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 import ModalsHost from './components/ModalsHost.vue'
 import TrainPage from './pages/TrainPage.vue'
+import ModelsPage from './pages/ModelsPage.vue'
 import QueuePage from './pages/QueuePage.vue'
 import ArtifactsPage from './pages/ArtifactsPage.vue'
 import EnvironmentPage from './pages/EnvironmentPage.vue'
@@ -60,8 +61,14 @@ const hasPending = computed(() => store.pending.length > 0 || !!store.editingId)
 const pendingNote = computed(() =>
   store.editingId ? '队列已暂停 · 编辑中' : (store.pending.length ? '跑完自动接下一个' : ''))
 
+const modelsCount = computed(() => {
+  const c = store.modelLib.catalog
+  return c.length ? c.filter(x => x.exists).length + '/' + c.length : ''
+})
+
 const nav = computed(() => [
   ['train', '训练', ''],
+  ['models', '模型', modelsCount.value],
   ['queue', '队列', String(store.doneJobs.length + store.pending.length + (st.value !== 'idle' ? 1 : 0))],
   ['artifacts', '产物', String(store.extraArtifacts.length + (demo.demoMode ? 5 : 0))],
   ['env', '环境', ''],
@@ -69,7 +76,8 @@ const nav = computed(() => [
 ].map(n => ({ key: n[0], label: n[1], count: n[2], active: store.page === n[0] })))
 
 const PAGES = {
-  train: TrainPage, queue: QueuePage, artifacts: ArtifactsPage, env: EnvironmentPage, presets: PresetsPage,
+  train: TrainPage, models: ModelsPage, queue: QueuePage,
+  artifacts: ArtifactsPage, env: EnvironmentPage, presets: PresetsPage,
 }
 const page = computed(() => PAGES[store.page] || TrainPage)
 </script>

@@ -227,6 +227,52 @@ def build_sample_prompt_text(values: dict) -> str | None:
     return " ".join(parts) + "\n"
 
 
+# ---- 模型库(一键下载 + 自动选择) ----
+# 文件名与大小经 hf-mirror API 实测核对(2026-07-31);fp8/nvfp4 量化版不可用于训练,不收录。
+# 官方 docs/qwen_image.md 称 VAE 在 Edit 仓库,实测该仓库无 vae 目录,真实位置为 Qwen-Image_ComfyUI。
+MODELS_DIR = REPO_ROOT / "models"
+ROLE_SUBDIR = {"dit": "diffusion_models", "text_encoder": "text_encoders", "vae": "vae"}
+
+_QWEN = "Comfy-Org/Qwen-Image_ComfyUI"
+_QWEN_EDIT = "Comfy-Org/Qwen-Image-Edit_ComfyUI"
+_QWEN_LAYERED = "Comfy-Org/Qwen-Image-Layered_ComfyUI"
+
+# {arch: {role: {variant|"*": (repo, remote_file, size_mb)}}};其余架构待逐个核对 docs 后补充
+MODEL_CATALOG: dict[str, dict[str, dict[str, tuple[str, str, int]]]] = {
+    "qwen-image": {
+        "dit": {
+            "original": (_QWEN, "split_files/diffusion_models/qwen_image_bf16.safetensors", 38968),
+            "edit": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_bf16.safetensors", 38968),
+            "edit-2509": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_2509_bf16.safetensors", 38968),
+            "edit-2511": (_QWEN_EDIT, "split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors", 38968),
+            "layered": (_QWEN_LAYERED, "split_files/diffusion_models/qwen_image_layered_bf16.safetensors", 38968),
+        },
+        "text_encoder": {"*": (_QWEN, "split_files/text_encoders/qwen_2.5_vl_7b.safetensors", 15816)},
+        "vae": {
+            "*": (_QWEN, "split_files/vae/qwen_image_vae.safetensors", 242),
+            "layered": (_QWEN_LAYERED, "split_files/vae/qwen_image_layered_vae.safetensors", 242),
+        },
+    },
+}
+
+
+def model_catalog_for(arch: str, variant: str) -> list[dict]:
+    """该架构+变体的推荐模型清单,附本地存在性(models/<role子目录>/<文件名>)。"""
+    out = []
+    for role, table in MODEL_CATALOG.get(arch, {}).items():
+        entry = table.get(variant) or table.get("*")
+        if not entry:
+            continue
+        repo, remote_file, size_mb = entry
+        filename = remote_file.rsplit("/", 1)[-1]
+        local = MODELS_DIR / ROLE_SUBDIR[role] / filename
+        out.append({
+            "role": role, "filename": filename, "repo": repo, "remote_file": remote_file,
+            "size_mb": size_mb, "exists": local.is_file(), "local_path": str(local),
+        })
+    return out
+
+
 def capabilities_payload() -> dict:
     archs = sorted(set(TRAIN_ENTRY))
     return {

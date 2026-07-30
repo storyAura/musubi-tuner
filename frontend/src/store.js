@@ -2,7 +2,7 @@
 // 训练流程当前为假数据模拟;交互语义(作业状态机、缓存删除确认、argv 脱敏)
 // 按 MUSUBI_TUNER_UI_ADAPTATION_HANDOFF.md 的 API 契约设计,后续替换为真实后端调用。
 import { reactive } from 'vue'
-import { postJson, subscribeJobEvents, trainPayloadValues } from './api.js'
+import { getJson, modelsQuery, postJson, subscribeJobEvents, trainPayloadValues } from './api.js'
 
 // ---- 运行配置(URL query) ----
 // 默认为真实模式:无假数据、无模拟训练,未实现的提交动作明确提示「后端未连接」。
@@ -52,6 +52,8 @@ export const store = reactive({
     gpuName: '', vramTotalGb: 0, vramUsedGb: 0, driver: '', computeCap: '', gpuCount: 0, source: 'none',
     backend: false, python: '', torch: null, accelerate: null,
   },
+  // 训练器模型库(models/ 目录):当前架构+变体的推荐清单与目录内现有文件
+  modelLib: { dir: '', catalog: [], files: {}, checked: false },
   values: {
     project_dir: '',
     model_arch: 'qwen-image',
@@ -161,7 +163,59 @@ export function setV(flag, val) {
       store.values.workflow = 'train_network'
     }
   }
+  // 架构或变体变化时刷新模型库并自动选择库中已有模型
+  if (flag === 'model_arch' || flag === 'model_version') refreshModels()
   store.banner = null
+}
+
+// ---- 模型库:清单刷新、自动选择、一键下载 ----
+
+export async function refreshModels(autoFill = true) {
+  if (demo.demoMode) return
+  try {
+    const data = await getJson(modelsQuery(store.values))
+    store.modelLib = { dir: data.models_dir, catalog: data.catalog, files: data.files, checked: true }
+    if (!autoFill) return
+    const filled = []
+    for (const c of data.catalog) {
+      // role 与表单字段同名(dit / text_encoder / vae);只填空字段,不覆盖手动输入
+      if (c.exists && store.values[c.role] === '') {
+        store.values[c.role] = c.local_path
+        filled.push(c.filename)
+      }
+    }
+    if (filled.length) {
+      log('dim', '[models] auto-selected from library · ' + filled.join(', '))
+      toast('info', '已自动选择模型库中的 ' + filled.length + ' 个模型')
+    }
+  } catch {
+    store.modelLib = { ...store.modelLib, checked: false }
+  }
+}
+
+export async function downloadModel(role) {
+  try {
+    const job = await postJson('/api/v1/models/download', {
+      architecture: store.values.model_arch,
+      model_version: store.values.model_version || '',
+      role,
+    })
+    if (job.status === 'exists') {
+      toast('info', '模型已在库中 · ' + job.filename)
+      refreshModels()
+      return
+    }
+    store.jobId = job.job_id
+    store.status = 'queued'
+    store.startedAt = nowHHMM()
+    store.exit = null
+    log('dim', '[job] accepted ' + job.job_id + ' · ' + job.workflow + ' · ' + job.note)
+    toast('info', '下载已开始 · ' + job.note + ' · 进度见终端')
+    attachRealJob(job.job_id)
+  } catch (err) {
+    log('err', 'ERROR: ' + err.message)
+    toast('error', '下载提交失败 · ' + err.message)
+  }
 }
 
 export function pushLogs(pairs) {
@@ -362,6 +416,7 @@ function handleRealStatus(ev) {
   }
   finishJob(st, store.step)
   if (esHandle) { esHandle.close(); esHandle = null }
+  refreshModels() // 下载/训练结束后刷新模型库(下载完成的模型自动选入表单)
 }
 
 function beginRun() {
@@ -729,6 +784,7 @@ export function init() {
     ])
   }
   probeEnv()
+  refreshModels()
 }
 
 export function destroy() {

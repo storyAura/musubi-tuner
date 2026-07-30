@@ -42,6 +42,12 @@ npm run dev        # http://localhost:5173(/api 自动代理到 :8787)
 - **取消**:确认弹窗 → `POST /jobs/{id}/cancel` → 先 CTRL_BREAK 温和终止,5s 后强杀进程树
 - **缓存作业**:latents / 文本编码器缓存(`--keep_cache` 经确认弹窗显式选择)
 - **训练中采样**:表单的提示词/尺寸/步数/种子序列化为 `--sample_prompts` 文件
+- **模型库(「模型」页)**:训练器内建 `models/{diffusion_models,text_encoders,vae}` 目录;
+  按架构+变体给出官方推荐权重清单(文件名/大小经 HF API 实测核对,fp8 量化版不收录)、
+  一键下载(下载即作业:进度流入终端、可取消、断点续传;先直连 HF、失败自动切 hf-mirror)、
+  手动导入(把 .safetensors 放进子目录即可);库中已有的模型在切换架构/变体时**自动填入**
+  训练表单的 DiT / Text Encoder / VAE 路径框(只填空字段,不覆盖手动输入)。
+  清单当前覆盖 Qwen-Image 全变体,其余架构待逐个核对 docs 后补充
 - **环境诊断**:GPU/显存/驱动(nvidia-smi,5s 刷新,顶栏与环境页同源)、python/torch/
   accelerate 探测;后端掉线自动降级(WebGL 读 GPU 名 + 明确「未连接」提示)
 - **变体/任务字段按架构条件显示**(前端 `ARCH_VARIANTS` 与后端 `backend/capability.py`

@@ -22,8 +22,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .capability import (
-    TRAIN_ENTRY, FULL_FINETUNE_ENTRY, REPO_ROOT,
-    build_sample_prompt_text, capabilities_payload, render_cache_argv, render_train_argv,
+    TRAIN_ENTRY, FULL_FINETUNE_ENTRY, REPO_ROOT, MODELS_DIR, ROLE_SUBDIR,
+    build_sample_prompt_text, capabilities_payload, model_catalog_for,
+    render_cache_argv, render_train_argv,
 )
 from .jobs import Job, manager
 
@@ -101,6 +102,42 @@ def environment():
 @app.get("/api/v1/capabilities")
 def capabilities():
     return capabilities_payload()
+
+
+# ---- 模型库 ----
+
+class DownloadRequest(BaseModel):
+    architecture: str
+    model_version: str = ""
+    role: str
+
+
+@app.get("/api/v1/models")
+async def list_models(architecture: str, model_version: str = ""):
+    files = {}
+    for role, sub in ROLE_SUBDIR.items():
+        d = MODELS_DIR / sub
+        files[role] = sorted(f.name for f in d.glob("*.safetensors")) if d.is_dir() else []
+    return {
+        "models_dir": str(MODELS_DIR),
+        "catalog": model_catalog_for(architecture, model_version),
+        "files": files,
+    }
+
+
+@app.post("/api/v1/models/download")
+async def download_model(req: DownloadRequest):
+    entry = next((c for c in model_catalog_for(req.architecture, req.model_version)
+                  if c["role"] == req.role), None)
+    if not entry:
+        raise HTTPException(422, f"no catalog entry for {req.architecture}/{req.model_version}/{req.role}")
+    if entry["exists"]:
+        return {"status": "exists", **entry}
+    dest = MODELS_DIR / ROLE_SUBDIR[req.role]
+    argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),
+            "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest)]
+    job = manager.submit(Job(f"download · {req.role}", req.architecture, entry["filename"], argv))
+    return job.summary()
 
 
 # ---- 作业 ----

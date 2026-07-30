@@ -74,7 +74,7 @@ function buildGroups() {
       ], adv: [],
     },
     {
-      key: 'model', eyebrow: 'MODEL', title: '模型与权重', desc: '角色 + 路径 + 变体兼容性由后端校验,前端只作即时提示。',
+      key: 'model', eyebrow: 'MODEL', title: '模型与权重', desc: '可在「模型」页一键下载;模型库中已有时,切换架构/变体会自动选择。',
       fields: [
         F('DiT', 'dit', 'path'),
         F('VAE', 'vae', 'path'),

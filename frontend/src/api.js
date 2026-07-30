@@ -21,6 +21,13 @@ export async function getJson(path) {
   return r.json()
 }
 
+export function modelsQuery(values) {
+  return '/api/v1/models?' + new URLSearchParams({
+    architecture: values.model_arch,
+    model_version: values.model_version || '',
+  }).toString()
+}
+
 // SSE 订阅;返回带 close() 的句柄。终态后服务端关流,onerror 里静默关闭。
 export function subscribeJobEvents(jobId, onEvent) {
   const es = new EventSource('/api/v1/jobs/' + jobId + '/events')
