@@ -167,6 +167,11 @@ async def download_model(req: DownloadRequest):
         raise HTTPException(422, f"no catalog entry for {req.architecture}/{req.filename}")
     if entry["exists"]:
         return {"status": "exists", **entry}
+    # 同一文件已有活跃下载 → 返回现有作业(前端订阅其事件流,历史进度随重放立即可见)
+    for existing in manager.jobs.values():
+        if (existing.workflow.startswith("download") and existing.note == entry["filename"]
+                and existing.status in ("queued", "running", "cancelling")):
+            return {**existing.summary(), "attached": True}
     dest = MODELS_DIR / ROLE_SUBDIR[entry["role"]]
     route = settings_store.load().get("download_route", "auto")
     argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),

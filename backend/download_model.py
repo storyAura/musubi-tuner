@@ -117,6 +117,10 @@ def main():
     tmp = dest / ".hf_partial"
     final = dest / a.file.rsplit("/", 1)[-1]
 
+    if final.exists():  # 幂等:排队期间前一个同文件作业已完成时,绝不重复下载
+        print(f"[download] already exists · {final}", flush=True)
+        return
+
     stop = threading.Event()
     start_progress_watch([tmp, final.with_suffix(final.suffix + ".part")], a.size_mb, stop)
 

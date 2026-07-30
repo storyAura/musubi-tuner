@@ -225,8 +225,13 @@ export async function downloadModel(architecture, filename) {
       return
     }
     store.downloads = { ...store.downloads, [filename]: { jobId: job.job_id, status: job.status || 'queued' } }
-    log('dim', '[job] accepted ' + job.job_id + ' · ' + job.workflow + ' · ' + job.note)
-    toast('info', '下载已开始 · ' + job.note + ' · 进度见终端')
+    if (job.attached) {
+      log('dim', '[job] attached ' + job.job_id + ' · 该文件已在下载,接入进度流')
+      toast('info', '该文件已在下载中 · 已接入进度 · ' + job.note)
+    } else {
+      log('dim', '[job] accepted ' + job.job_id + ' · ' + job.workflow + ' · ' + job.note)
+      toast('info', '下载已开始 · ' + job.note + ' · 进度见终端')
+    }
     attachDownloadJob(job.job_id, filename)
   } catch (err) {
     log('err', 'ERROR: ' + err.message)
