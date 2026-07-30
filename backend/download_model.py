@@ -5,6 +5,7 @@
 下载成功后归位到 models/<role子目录>/ 并清理临时目录。
 """
 import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -18,6 +19,9 @@ def main():
     p.add_argument("--file", required=True)
     p.add_argument("--dest", required=True)
     a = p.parse_args()
+
+    # Xet 存储协议经代理(AutoDL 学术加速/Clash)常见 401,禁用后回退传统 HTTP 下载
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
     from huggingface_hub import hf_hub_download
 
