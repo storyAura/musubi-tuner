@@ -247,6 +247,11 @@ function attachDownloadJob(jobId, filename) {
       log(ev.kind || 'ink', ev.text)
       return
     }
+    if (ev.type === 'progress' && ev.dl) { // 结构化进度:驱动模型页进度条,不进终端
+      const cur = store.downloads[filename] || { jobId, status: 'running' }
+      store.downloads = { ...store.downloads, [filename]: { ...cur, ...ev.dl } }
+      return
+    }
     if (ev.type !== 'status') return
     const st = ev.status
     store.downloads = { ...store.downloads, [filename]: { jobId, status: st } }

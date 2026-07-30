@@ -190,6 +190,13 @@ class JobManager:
             self._handle_line(job, buf.strip())
 
     def _handle_line(self, job: Job, line: str):
+        if line.startswith("[dlprog] "):  # 结构化下载进度:只发 progress 事件,不进日志
+            try:
+                dl = json.loads(line[9:])
+            except ValueError:
+                return
+            self._publish_threadsafe(job, {"type": "progress", "dl": dl})
+            return
         low = line.lower()
         kind = "err" if ("error" in low or "traceback" in low or "exception" in low) \
             else ("warn" if "warning" in low else "ink")

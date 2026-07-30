@@ -2,11 +2,32 @@
 // 模型库:上半部分是当前架构+变体的推荐清单(自动选择联动);
 // 下半部分是全部 12 个架构的完整可训练模型清单(按架构分组,均为实测核对的官方权重)。
 import { computed, onMounted } from 'vue'
-import { store, demo, downloadModel, cancelDownload, refreshModels, loadAllModels } from '../store.js'
+import { store, demo, clock, downloadModel, cancelDownload, refreshModels, loadAllModels } from '../store.js'
 
 // 下载状态独立于训练状态机;每个条目按自身 filename 查询下载进度
 function dlStatus(filename) {
   return store.downloads[filename]?.status || ''
+}
+
+function dlInfo(filename) {
+  const d = store.downloads[filename]
+  return d && d.bytes ? d : null
+}
+
+function dlPct(filename) {
+  const d = dlInfo(filename)
+  return d && d.total_bytes ? Math.min(100, d.bytes / d.total_bytes * 100) : 0
+}
+
+function dlLine(filename) {
+  const d = dlInfo(filename)
+  if (!d) return ''
+  const gb = x => (x / 1024 ** 3).toFixed(2)
+  const spd = (d.speed_bps || 0) >= 1048576
+    ? (d.speed_bps / 1048576).toFixed(1) + ' MB/s'
+    : Math.round((d.speed_bps || 0) / 1024) + ' KB/s'
+  const eta = d.eta_s > 0 ? clock(d.eta_s) : '--:--'
+  return gb(d.bytes) + ' / ' + gb(d.total_bytes) + ' GB · ' + spd + ' · ETA ' + eta + ' · ' + Math.round(dlPct(filename)) + '%'
 }
 const archLabel = computed(() => {
   const v = store.values
@@ -71,6 +92,13 @@ onMounted(() => { if (!store.modelLibAll.checked) loadAllModels() })
           <div style="min-width:0">
             <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.filename }}</div>
             <div style="font-family:var(--font-mono);font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.repo }}<span v-if="c.note"> · {{ c.note }}</span></div>
+            <div v-if="!c.exists && dlInfo(c.filename)" style="margin:8px 0 6px;max-width:520px">
+              <div style="position:relative;height:6px;background:var(--hairline);border-radius:6px;overflow:visible">
+                <div :style="{ width: dlPct(c.filename) + '%', height: '6px', background: 'var(--ink)', borderRadius: '6px', transition: 'width .5s linear' }"></div>
+                <div :style="{ position: 'absolute', top: '-2px', left: 'calc(' + dlPct(c.filename) + '% - 5px)', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent)', transition: 'left .5s linear', animation: 'tailPulse 1.6s ease-out infinite' }"></div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--body);font-variant-numeric:tabular-nums;margin-top:4px">{{ dlLine(c.filename) }}</div>
+            </div>
           </div>
           <span style="font-family:var(--font-mono);font-size:13px;color:var(--body);text-align:right;font-variant-numeric:tabular-nums">{{ sizeLabel(c.size_mb) }}</span>
           <span v-if="c.exists" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">
@@ -115,6 +143,13 @@ onMounted(() => { if (!store.modelLibAll.checked) loadAllModels() })
           <div style="min-width:0">
             <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.filename }}</div>
             <div style="font-family:var(--font-mono);font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.repo }}<span v-if="c.note"> · {{ c.note }}</span></div>
+            <div v-if="!c.exists && dlInfo(c.filename)" style="margin:8px 0 6px;max-width:520px">
+              <div style="position:relative;height:6px;background:var(--hairline);border-radius:6px;overflow:visible">
+                <div :style="{ width: dlPct(c.filename) + '%', height: '6px', background: 'var(--ink)', borderRadius: '6px', transition: 'width .5s linear' }"></div>
+                <div :style="{ position: 'absolute', top: '-2px', left: 'calc(' + dlPct(c.filename) + '% - 5px)', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent)', transition: 'left .5s linear', animation: 'tailPulse 1.6s ease-out infinite' }"></div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--body);font-variant-numeric:tabular-nums;margin-top:4px">{{ dlLine(c.filename) }}</div>
+            </div>
           </div>
           <span style="font-family:var(--font-mono);font-size:13px;color:var(--body);text-align:right;font-variant-numeric:tabular-nums">{{ sizeLabel(c.size_mb) }}</span>
           <span v-if="c.exists" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--accent)">

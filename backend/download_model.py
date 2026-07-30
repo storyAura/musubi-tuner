@@ -20,28 +20,44 @@ CHUNK = 8 * 1024 * 1024
 
 
 def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading.Event) -> None:
-    """每 10s 打印下载中文件的当前大小(不依赖 tqdm——它在管道里常被吞掉)。"""
+    """每 5s 发一条结构化进度([dlprog] JSON,由作业管理器转为 progress 事件驱动
+    前端进度条),不打日志行——终端只留关键节点,不刷屏。速度做 EMA 平滑。"""
+    import json as _json
+    import time as _time
+
+    def scan() -> int:
+        size = 0
+        for p in watch_paths:
+            if p.is_dir():
+                for f in p.rglob("*"):
+                    if f.is_file():
+                        try:
+                            size = max(size, f.stat().st_size)
+                        except OSError:
+                            pass
+            elif p.exists():
+                try:
+                    size = max(size, p.stat().st_size)
+                except OSError:
+                    pass
+        return size
+
     def loop():
-        last = -1
-        while not stop.wait(10):
-            size = 0
-            for p in watch_paths:
-                if p.is_dir():
-                    for f in p.rglob("*"):
-                        if f.is_file():
-                            try:
-                                size = max(size, f.stat().st_size)
-                            except OSError:
-                                pass
-                elif p.exists():
-                    try:
-                        size = max(size, p.stat().st_size)
-                    except OSError:
-                        pass
-            if size and size != last:
-                pct = f" · {size / (total_mb * 1024 * 1024) * 100:.1f}%" if total_mb else ""
-                print(f"[download] progress {size / (1024**3):.2f} GB{pct}", flush=True)
-                last = size
+        total_b = total_mb * 1024 * 1024
+        last_size, last_t, speed = scan(), _time.monotonic(), 0.0
+        while not stop.wait(5):
+            size = scan()
+            now = _time.monotonic()
+            dt = now - last_t
+            inst = (size - last_size) / dt if dt > 0 and size >= last_size else 0.0
+            speed = inst if speed <= 0 else speed * 0.6 + inst * 0.4
+            last_size, last_t = size, now
+            if not size:
+                continue
+            eta = int((total_b - size) / speed) if speed > 1 and total_b > size else -1
+            print("[dlprog] " + _json.dumps({
+                "bytes": size, "total_bytes": total_b, "speed_bps": int(speed), "eta_s": eta,
+            }), flush=True)
 
     threading.Thread(target=loop, daemon=True).start()
 
@@ -70,20 +86,13 @@ def modelscope_download(repo: str, file: str, final: Path) -> None:
         pos = 0
     total = pos + int(r.headers.get("Content-Length") or 0)
     done = pos
-    step = max(total // 50, 128 * 1024 * 1024) if total else 256 * 1024 * 1024
-    next_mark = done + step
-    with open(part, "ab" if pos else "wb") as f:
+    with open(part, "ab" if pos else "wb") as f:  # 进度由 watch 线程统一上报,这里只管写
         while True:
             chunk = r.read(CHUNK)
             if not chunk:
                 break
             f.write(chunk)
             done += len(chunk)
-            if done >= next_mark:
-                pct = f"{done / total * 100:5.1f}%" if total else "?"
-                print(f"[download] modelscope {pct} ({done / (1024**3):.2f}/{total / (1024**3):.2f} GB)",
-                      flush=True)
-                next_mark += step
     if total and done != total:
         raise IOError(f"incomplete download: {done}/{total} bytes")
     part.rename(final)
