@@ -1,30 +1,115 @@
-"""模型下载脚本 — 由作业后端以子进程运行,进度原样流入 UI 终端面板。
+"""模型下载脚本 — 由作业后端以子进程运行,结构化进度驱动前端进度条。
 
-下载源三级回退:
-1. HuggingFace 默认端点(尊重 $HF_ENDPOINT;有代理的机器直连往往可用)
-2. hf-mirror 镜像(剥掉继承代理直连;绕不过 gated 授权)
-3. ModelScope 魔搭(国内直连,多数 HF gated 模型在魔搭免授权,同名仓库同名文件)
-
-均支持断点续传;成功后归位到 models/<role子目录>/ 并清理临时文件。
+下载源:HuggingFace 直连 / hf-mirror / ModelScope 魔搭。
+route=auto 时先并行实测三条线路的真实吞吐(对目标文件 Range 拉取数 MB),
+按速度排序逐个尝试;不可达或 gated(401/403)自动得 0 分垫底。
+已有断点缓存的线路体系优先(HF 系与魔搭的缓存互不通用,换源会从零下载)。
+均支持断点续传;成功后归位到 models/<role子目录>/。
 """
 import argparse
+import json
 import os
 import shutil
 import sys
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
 MIRROR = "https://hf-mirror.com"
 CHUNK = 8 * 1024 * 1024
+SOURCES = ("hf", "mirror", "modelscope")
+SOURCE_LABEL = {
+    "hf": "huggingface.co (direct)",
+    "mirror": MIRROR,
+    "modelscope": "modelscope.cn (魔搭)",
+}
+
+
+_PROXY_KEYS = ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY")
+_SAVED_PROXIES = {k: os.environ[k] for k in _PROXY_KEYS if k in os.environ}
+
+
+def set_proxies(enabled: bool):
+    """HF 直连要走环境代理;mirror/魔搭要直连。线路顺序不定,故可恢复地切换。"""
+    if enabled:
+        os.environ.update(_SAVED_PROXIES)
+    else:
+        for k in _PROXY_KEYS:
+            os.environ.pop(k, None)
+
+
+def _opener(use_env_proxy: bool):
+    if use_env_proxy:
+        return urllib.request.build_opener()  # 读环境代理(HF 直连在代理环境更快)
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 强制直连
+
+
+def _source_url(src: str, repo: str, file: str) -> str:
+    if src == "modelscope":
+        return f"https://modelscope.cn/models/{repo}/resolve/master/{file}"
+    base = MIRROR if src == "mirror" else "https://huggingface.co"
+    return f"{base}/{repo}/resolve/main/{file}"
+
+
+def _fmt_bps(bps: float) -> str:
+    return f"{bps / 1048576:.1f} MB/s" if bps >= 1048576 else f"{bps / 1024:.0f} KB/s"
+
+
+def speed_test(src: str, repo: str, file: str, budget: float = 5.0) -> float:
+    """对目标文件 Range 拉取实测吞吐;不可达/gated 返回 0。"""
+    headers = {"User-Agent": "musubi-tuner-ui", "Range": "bytes=0-8388607"}
+    if src == "hf" and os.environ.get("HF_TOKEN"):
+        headers["Authorization"] = "Bearer " + os.environ["HF_TOKEN"]
+    t0 = time.monotonic()
+    try:
+        r = _opener(src == "hf").open(
+            urllib.request.Request(_source_url(src, repo, file), headers=headers), timeout=6)
+        got = 0
+        while time.monotonic() - t0 < budget:
+            chunk = r.read(256 * 1024)
+            if not chunk:
+                break
+            got += len(chunk)
+        dt = time.monotonic() - t0
+        return got / dt if got and dt > 0 else 0.0
+    except Exception:  # noqa: BLE001 — 测速失败即 0 分
+        return 0.0
+
+
+def rank_sources(repo: str, file: str, hf_cache: int, ms_cache: int) -> list[str]:
+    results: dict[str, float] = {}
+    threads = []
+    for src in SOURCES:
+        t = threading.Thread(target=lambda s=src: results.__setitem__(s, speed_test(s, repo, file)))
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join(timeout=15)
+    print("[download] speed test · " + " · ".join(
+        f"{s}: {_fmt_bps(results.get(s, 0)) if results.get(s, 0) else '不可达'}" for s in SOURCES),
+        flush=True)
+
+    order = sorted([s for s in SOURCES if results.get(s, 0) > 0], key=lambda s: -results[s])
+    order += [s for s in SOURCES if results.get(s, 0) <= 0]  # 不可达的垫底兜底
+    # 断点缓存优先:HF 系(hf/mirror 共享缓存)与魔搭缓存不通用,换源等于从零下
+    margin = 256 * 1024 * 1024
+    if hf_cache > ms_cache + margin:
+        pref = [s for s in order if s in ("hf", "mirror") and results.get(s, 0) > 0]
+        if pref and order[0] not in ("hf", "mirror"):
+            order.remove(pref[0])
+            order.insert(0, pref[0])
+            print(f"[download] 续传优先 · HF 系已有 {hf_cache // (1024**2)} MB 缓存", flush=True)
+    elif ms_cache > hf_cache + margin and results.get("modelscope", 0) > 0 and order[0] != "modelscope":
+        order.remove("modelscope")
+        order.insert(0, "modelscope")
+        print(f"[download] 续传优先 · 魔搭已有 {ms_cache // (1024**2)} MB 缓存", flush=True)
+    print(f"[download] 线路顺序 → {' > '.join(order)}", flush=True)
+    return order
 
 
 def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading.Event) -> None:
-    """每 5s 发一条结构化进度([dlprog] JSON,由作业管理器转为 progress 事件驱动
-    前端进度条),不打日志行——终端只留关键节点,不刷屏。速度做 EMA 平滑。"""
-    import json as _json
-    import time as _time
-
+    """每 5s 发一条结构化进度([dlprog] JSON → progress 事件驱动前端进度条),不刷日志。"""
     def scan() -> int:
         size = 0
         for p in watch_paths:
@@ -44,10 +129,10 @@ def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading
 
     def loop():
         total_b = total_mb * 1024 * 1024
-        last_size, last_t, speed = scan(), _time.monotonic(), 0.0
+        last_size, last_t, speed = scan(), time.monotonic(), 0.0
         while not stop.wait(5):
             size = scan()
-            now = _time.monotonic()
+            now = time.monotonic()
             dt = now - last_t
             inst = (size - last_size) / dt if dt > 0 and size >= last_size else 0.0
             speed = inst if speed <= 0 else speed * 0.6 + inst * 0.4
@@ -55,16 +140,11 @@ def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading
             if not size:
                 continue
             eta = int((total_b - size) / speed) if speed > 1 and total_b > size else -1
-            print("[dlprog] " + _json.dumps({
+            print("[dlprog] " + json.dumps({
                 "bytes": size, "total_bytes": total_b, "speed_bps": int(speed), "eta_s": eta,
             }), flush=True)
 
     threading.Thread(target=loop, daemon=True).start()
-
-
-def strip_proxies():
-    for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
-        os.environ.pop(k, None)
 
 
 def hf_download(repo: str, file: str, tmp: Path, endpoint: str | None) -> str:
@@ -73,8 +153,8 @@ def hf_download(repo: str, file: str, tmp: Path, endpoint: str | None) -> str:
 
 
 def modelscope_download(repo: str, file: str, final: Path) -> None:
-    """魔搭 resolve 直链,Range 断点续传,进度按百分比打印。"""
-    url = f"https://modelscope.cn/models/{repo}/resolve/master/{file}"
+    """魔搭 resolve 直链,Range 断点续传;进度由 watch 线程统一上报。"""
+    url = _source_url("modelscope", repo, file)
     part = final.with_suffix(final.suffix + ".part")
     pos = part.stat().st_size if part.exists() else 0
     headers = {"User-Agent": "musubi-tuner-ui"}
@@ -86,7 +166,7 @@ def modelscope_download(repo: str, file: str, final: Path) -> None:
         pos = 0
     total = pos + int(r.headers.get("Content-Length") or 0)
     done = pos
-    with open(part, "ab" if pos else "wb") as f:  # 进度由 watch 线程统一上报,这里只管写
+    with open(part, "ab" if pos else "wb") as f:
         while True:
             chunk = r.read(CHUNK)
             if not chunk:
@@ -98,15 +178,17 @@ def modelscope_download(repo: str, file: str, final: Path) -> None:
     part.rename(final)
 
 
-ROUTE_SOURCES = {
-    "auto": ["hf", "mirror", "modelscope"],
-    "hf": ["hf"], "mirror": ["mirror"], "modelscope": ["modelscope"],
-}
-SOURCE_LABEL = {
-    "hf": "default ($HF_ENDPOINT / huggingface.co)",
-    "mirror": MIRROR,
-    "modelscope": "https://modelscope.cn (魔搭)",
-}
+def _dir_max_size(p: Path) -> int:
+    if not p.is_dir():
+        return 0
+    size = 0
+    for f in p.rglob("*"):
+        if f.is_file():
+            try:
+                size = max(size, f.stat().st_size)
+            except OSError:
+                pass
+    return size
 
 
 def main():
@@ -114,7 +196,7 @@ def main():
     p.add_argument("--repo", required=True)
     p.add_argument("--file", required=True)
     p.add_argument("--dest", required=True)
-    p.add_argument("--route", default="auto", choices=sorted(ROUTE_SOURCES))
+    p.add_argument("--route", default="auto", choices=["auto", *SOURCES])
     p.add_argument("--size-mb", type=int, default=0, help="预期大小(仅用于进度百分比)")
     a = p.parse_args()
 
@@ -125,24 +207,28 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     tmp = dest / ".hf_partial"
     final = dest / a.file.rsplit("/", 1)[-1]
+    part = final.with_suffix(final.suffix + ".part")
 
     if final.exists():  # 幂等:排队期间前一个同文件作业已完成时,绝不重复下载
         print(f"[download] already exists · {final}", flush=True)
         return
 
-    stop = threading.Event()
-    start_progress_watch([tmp, final.with_suffix(final.suffix + ".part")], a.size_mb, stop)
+    if a.route == "auto":
+        order = rank_sources(a.repo, a.file, _dir_max_size(tmp), part.stat().st_size if part.exists() else 0)
+    else:
+        order = [a.route]
 
-    for src in ROUTE_SOURCES[a.route]:
+    stop = threading.Event()
+    start_progress_watch([tmp, part], a.size_mb, stop)
+
+    for src in order:
+        set_proxies(src == "hf")  # HF 直连走代理;mirror/魔搭强制直连
         print(f"[download] endpoint {SOURCE_LABEL[src]}", flush=True)
         print(f"[download] {a.repo} :: {a.file}", flush=True)
         try:
             if src == "modelscope":
-                strip_proxies()  # 魔搭国内直连
                 modelscope_download(a.repo, a.file, final)
             else:
-                if src == "mirror":
-                    strip_proxies()  # hf-mirror 面向直连,继承代理会劫持它
                 got = hf_download(a.repo, a.file, tmp, MIRROR if src == "mirror" else None)
                 shutil.move(got, final)
                 shutil.rmtree(tmp, ignore_errors=True)

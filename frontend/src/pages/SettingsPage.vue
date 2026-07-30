@@ -11,7 +11,7 @@ const msInput = ref('')
 const connected = computed(() => demo.demoMode || store.settings.loaded)
 
 const ROUTES = [
-  { v: 'auto', label: '自动(推荐)', hint: 'HF 直连 → hf-mirror → 魔搭 逐级回退' },
+  { v: 'auto', label: '自动(推荐)', hint: '并行实测三条线路速度,谁快用谁;失败自动回退到次快' },
   { v: 'hf', label: '仅 HF 直连', hint: '有代理/海外网络时最快;gated 模型需 Token' },
   { v: 'mirror', label: '仅 hf-mirror', hint: '国内直连镜像;不能绕过 gated 授权' },
   { v: 'modelscope', label: '仅魔搭', hint: '国内直连;多数 gated 模型免授权' },
