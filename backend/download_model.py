@@ -11,11 +11,39 @@ import argparse
 import os
 import shutil
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
 MIRROR = "https://hf-mirror.com"
 CHUNK = 8 * 1024 * 1024
+
+
+def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading.Event) -> None:
+    """每 10s 打印下载中文件的当前大小(不依赖 tqdm——它在管道里常被吞掉)。"""
+    def loop():
+        last = -1
+        while not stop.wait(10):
+            size = 0
+            for p in watch_paths:
+                if p.is_dir():
+                    for f in p.rglob("*"):
+                        if f.is_file():
+                            try:
+                                size = max(size, f.stat().st_size)
+                            except OSError:
+                                pass
+                elif p.exists():
+                    try:
+                        size = max(size, p.stat().st_size)
+                    except OSError:
+                        pass
+            if size and size != last:
+                pct = f" · {size / (total_mb * 1024 * 1024) * 100:.1f}%" if total_mb else ""
+                print(f"[download] progress {size / (1024**3):.2f} GB{pct}", flush=True)
+                last = size
+
+    threading.Thread(target=loop, daemon=True).start()
 
 
 def strip_proxies():
@@ -78,6 +106,7 @@ def main():
     p.add_argument("--file", required=True)
     p.add_argument("--dest", required=True)
     p.add_argument("--route", default="auto", choices=sorted(ROUTE_SOURCES))
+    p.add_argument("--size-mb", type=int, default=0, help="预期大小(仅用于进度百分比)")
     a = p.parse_args()
 
     # Xet 存储协议经代理(AutoDL 学术加速/Clash)常见 401,禁用后回退传统 HTTP 下载
@@ -87,6 +116,9 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     tmp = dest / ".hf_partial"
     final = dest / a.file.rsplit("/", 1)[-1]
+
+    stop = threading.Event()
+    start_progress_watch([tmp, final.with_suffix(final.suffix + ".part")], a.size_mb, stop)
 
     for src in ROUTE_SOURCES[a.route]:
         print(f"[download] endpoint {SOURCE_LABEL[src]}", flush=True)
@@ -101,11 +133,13 @@ def main():
                 got = hf_download(a.repo, a.file, tmp, MIRROR if src == "mirror" else None)
                 shutil.move(got, final)
                 shutil.rmtree(tmp, ignore_errors=True)
+            stop.set()
             print(f"[download] saved {final}", flush=True)
             return
         except Exception as e:  # noqa: BLE001 — 逐线路回退
             print(f"[download] endpoint failed · {type(e).__name__}: {str(e)[:200]}", flush=True)
 
+    stop.set()
     print(f"ERROR: all endpoints failed (route={a.route}) — 可在设置页切换下载线路或配置 token", flush=True)
     sys.exit(1)
 

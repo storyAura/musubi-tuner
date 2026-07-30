@@ -27,6 +27,9 @@ if [ ! -f frontend/dist/index.html ]; then
 fi
 
 pkill -f 'uvicorn backend.main:app' 2>/dev/null || true
+# 顺带清理上一代服务留下的孤儿下载进程(作业表在内存,重启后无人跟踪;
+# 不清会占着 HF 文件锁,让新提交的同文件下载卡在等锁上。断点缓存保留,可续传)
+pkill -f 'backend/download_model.py' 2>/dev/null || true
 sleep 1
 echo "[webui] starting on 0.0.0.0:$PORT (log: webui.log)"
 nohup "$PY" -m uvicorn backend.main:app --host 0.0.0.0 --port "$PORT" >> webui.log 2>&1 &

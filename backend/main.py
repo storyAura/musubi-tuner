@@ -171,7 +171,7 @@ async def download_model(req: DownloadRequest):
     route = settings_store.load().get("download_route", "auto")
     argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),
             "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest),
-            "--route", route]
+            "--route", route, "--size-mb", str(entry["size_mb"])]
     job = manager.submit(Job(f"download · {entry['role']}", req.architecture, entry["filename"], argv))
     return job.summary()
 
