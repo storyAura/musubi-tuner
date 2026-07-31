@@ -24,8 +24,9 @@ from pydantic import BaseModel, Field
 
 from .capability import (
     TRAIN_ENTRY, FULL_FINETUNE_ENTRY, REPO_ROOT, MODELS_DIR, ROLE_SUBDIR,
-    build_sample_prompt_text, capabilities_payload, find_catalog_entry,
-    model_catalog_all, model_catalog_for, render_cache_argv, render_train_argv,
+    build_sample_prompt_text, capabilities_payload, default_download_root,
+    find_catalog_entry, model_catalog_all, model_catalog_for, model_roots,
+    render_cache_argv, render_train_argv,
 )
 from .jobs import Job, manager
 from . import settings as settings_store
@@ -112,6 +113,8 @@ class SettingsPatch(BaseModel):
     hf_token: str | None = None
     modelscope_token: str | None = None
     download_route: str | None = None
+    model_dirs: list[str] | None = None
+    default_model_dir: str | None = None
 
 
 @app.get("/api/v1/settings")
@@ -134,20 +137,27 @@ class DownloadRequest(BaseModel):
     filename: str
 
 
-def _library_files() -> dict:
-    files = {}
-    for sub in sorted(set(ROLE_SUBDIR.values())):
-        d = MODELS_DIR / sub
-        files[sub] = sorted(f.name for f in d.iterdir() if f.is_file()) if d.is_dir() else []
-    return files
+def _libraries() -> list[dict]:
+    out = []
+    for root in model_roots():
+        files = {}
+        for sub in sorted(set(ROLE_SUBDIR.values())):
+            d = root / sub
+            try:
+                files[sub] = sorted(f.name for f in d.iterdir() if f.is_file()) if d.is_dir() else []
+            except OSError:
+                files[sub] = []
+        out.append({"dir": str(root), "builtin": root == MODELS_DIR, "files": files})
+    return out
 
 
 @app.get("/api/v1/models")
 async def list_models(architecture: str, model_version: str = ""):
     return {
         "models_dir": str(MODELS_DIR),
+        "default_dir": str(default_download_root()),
         "catalog": model_catalog_for(architecture, model_version),
-        "files": _library_files(),
+        "libraries": _libraries(),
     }
 
 
@@ -155,8 +165,9 @@ async def list_models(architecture: str, model_version: str = ""):
 async def list_all_models():
     return {
         "models_dir": str(MODELS_DIR),
+        "default_dir": str(default_download_root()),
         "architectures": model_catalog_all(),
-        "files": _library_files(),
+        "libraries": _libraries(),
     }
 
 
@@ -172,7 +183,7 @@ async def download_model(req: DownloadRequest):
         if (existing.workflow.startswith("download") and existing.note == entry["filename"]
                 and existing.status in ("queued", "running", "cancelling")):
             return {**existing.summary(), "attached": True}
-    dest = MODELS_DIR / ROLE_SUBDIR[entry["role"]]
+    dest = default_download_root() / ROLE_SUBDIR[entry["role"]]
     route = settings_store.load().get("download_route", "auto")
     argv = [sys.executable, str(Path(__file__).resolve().parent / "download_model.py"),
             "--repo", entry["repo"], "--file", entry["remote_file"], "--dest", str(dest),

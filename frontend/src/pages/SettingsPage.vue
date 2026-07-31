@@ -3,10 +3,30 @@
 // Token 明文只保存在训练机 backend/.runtime/settings.json(不进 git),
 // API 只回传脱敏状态;作业进程通过环境变量使用,不进 argv 与日志。
 import { computed, ref } from 'vue'
-import { store, demo, saveSettings, loadSettings } from '../store.js'
+import { store, demo, saveSettings, loadSettings, refreshModels, loadAllModels } from '../store.js'
 
 const hfInput = ref('')
 const msInput = ref('')
+const dirInput = ref('')
+
+async function saveAndRescan(patch) {
+  if (await saveSettings(patch)) { refreshModels(); loadAllModels() }
+}
+
+function addDir() {
+  const v = dirInput.value.trim()
+  if (!v) return
+  saveAndRescan({ model_dirs: [...store.settings.model_dirs, v] })
+  dirInput.value = ''
+}
+
+function removeDir(d) {
+  const patch = { model_dirs: store.settings.model_dirs.filter(x => x !== d) }
+  if (store.settings.default_model_dir === d) patch.default_model_dir = '' // 回退到训练器内置
+  saveAndRescan(patch)
+}
+
+function setDefaultDir(v) { saveAndRescan({ default_model_dir: v }) }
 
 const connected = computed(() => demo.demoMode || store.settings.loaded)
 
@@ -90,6 +110,46 @@ function setRoute(v) { saveSettings({ download_route: v }) }
           :style="(!hfInput.trim() && !msInput.trim()) ? 'opacity:.4;cursor:not-allowed' : 'cursor:pointer'"
           class="hv-fade"
           style="margin-top:20px;height:36px;padding:0 16px;background:var(--primary);color:var(--on-primary);border:none;border-radius:6px;font-size:14px;font-weight:500;transition:opacity .14s ease">保存 Token</button>
+      </section>
+
+      <section style="background:var(--surface);border-radius:8px;box-shadow:var(--shadow-card);padding:20px 24px 24px">
+        <div style="font-family:var(--font-mono);font-size:12px;line-height:16px;letter-spacing:.5px;color:var(--mute)">STORAGE</div>
+        <h2 style="margin:6px 0 0;font-size:16px;line-height:24px;font-weight:600;color:var(--ink)">模型存储位置</h2>
+        <p style="margin:6px 0 16px;font-size:12px;line-height:16px;color:var(--mute)">目录需含 diffusion_models / text_encoders / vae / clip_vision 子目录(与 ComfyUI 的 models 同构,可直接添加 ComfyUI 目录复用现有模型);所有目录里的模型都参与「已就绪」识别与自动选择。</p>
+
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:224px minmax(0,1fr);gap:16px;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:500;color:var(--ink)">默认下载位置</span>
+            </div>
+            <div style="position:relative;display:inline-block">
+              <select :value="store.settings.default_model_dir" @change="setDefaultDir($event.target.value)"
+                style="appearance:none;-webkit-appearance:none;min-width:320px;max-width:100%;height:36px;padding:0 30px 0 10px;background:var(--surface);border:1px solid var(--hairline);border-radius:6px;font-family:var(--font-mono);font-size:13px;color:var(--ink);cursor:pointer">
+                <option value="">训练器内置 · {{ store.modelLib.dir || 'models/' }}</option>
+                <option v-for="d in store.settings.model_dirs" :key="d" :value="d">{{ d }}</option>
+              </select>
+              <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:10px;color:var(--mute)">▾</span>
+            </div>
+          </div>
+
+          <div v-for="d in store.settings.model_dirs" :key="d"
+            style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--hairline);border-radius:6px">
+            <span style="flex:1;font-family:var(--font-mono);font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d }}</span>
+            <span v-if="store.settings.default_model_dir === d"
+              style="font-family:var(--font-mono);font-size:11px;color:var(--accent);border:1px solid var(--hairline);border-radius:6px;padding:1px 6px;white-space:nowrap">默认下载</span>
+            <button @click="removeDir(d)" class="hv-line"
+              style="height:28px;padding:0 10px;background:transparent;border:1px solid var(--hairline);border-radius:6px;font-size:12px;color:var(--body);white-space:nowrap;cursor:pointer">移除</button>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center">
+            <input v-model="dirInput" placeholder="例:/root/autodl-tmp/models 或 D:/ComfyUI/models" @keyup.enter="addDir"
+              style="flex:1;max-width:460px;height:36px;padding:0 10px;background:var(--surface);border:1px solid var(--hairline);border-radius:6px;font-family:var(--font-mono);font-size:13px;color:var(--ink)" />
+            <button @click="addDir" :disabled="!dirInput.trim()"
+              :style="!dirInput.trim() ? 'opacity:.4;cursor:not-allowed' : 'cursor:pointer'"
+              class="hv-border"
+              style="height:36px;padding:0 14px;background:var(--surface);border:1px solid var(--hairline);border-radius:6px;font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;transition:border-color .14s ease">添加目录</button>
+          </div>
+        </div>
       </section>
 
       <section style="background:var(--surface);border-radius:8px;box-shadow:var(--shadow-card);padding:20px 24px 24px">

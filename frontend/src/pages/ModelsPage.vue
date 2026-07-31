@@ -176,18 +176,22 @@ onMounted(() => { if (!store.modelLibAll.checked) loadAllModels() })
         </div>
       </section>
 
-      <section style="background:var(--surface);border-radius:8px;box-shadow:var(--shadow-card);padding:16px 20px;margin-top:32px">
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+      <section v-for="lib in store.modelLib.libraries" :key="lib.dir"
+        style="background:var(--surface);border-radius:8px;box-shadow:var(--shadow-card);padding:16px 20px;margin-top:16px">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;flex-wrap:wrap">
           <div style="font-family:var(--font-mono);font-size:12px;letter-spacing:.5px;color:var(--mute)">LIBRARY</div>
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ store.modelLib.dir }}</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ lib.dir }}</span>
+          <span v-if="lib.builtin" style="font-family:var(--font-mono);font-size:11px;color:var(--mute);border:1px solid var(--hairline);border-radius:6px;padding:1px 6px">内置</span>
+          <span v-if="lib.dir === store.modelLib.defaultDir"
+            style="font-family:var(--font-mono);font-size:11px;color:var(--accent);border:1px solid var(--hairline);border-radius:6px;padding:1px 6px">默认下载位置</span>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;line-height:16px;color:var(--mute)">手动导入:把模型文件放进对应子目录,点「刷新」即可被识别与自动选择。多分片权重(FLUX.2 dev 文本编码器、Kandinsky 文本编码器等)暂不支持一键下载,需手动准备。</p>
+        <p v-if="lib.builtin" style="margin:0 0 12px;font-size:12px;line-height:16px;color:var(--mute)">手动导入:把模型文件放进对应子目录,点「刷新」即可被识别与自动选择;可在「设置」页添加更多存储目录(如 ComfyUI 的 models)。多分片权重暂不支持一键下载,需手动准备。</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
           <div v-for="sub in LIB_SUBDIRS" :key="sub">
             <div style="font-family:var(--font-mono);font-size:12px;color:var(--mute);border-bottom:1px solid var(--hairline);padding-bottom:6px;margin-bottom:6px">{{ sub }}/</div>
-            <div v-if="!(store.modelLib.files[sub] || []).length"
+            <div v-if="!(lib.files[sub] || []).length"
               style="font-family:var(--font-mono);font-size:12px;color:var(--mute);opacity:.6">(空)</div>
-            <div v-for="f in store.modelLib.files[sub] || []" :key="f"
+            <div v-for="f in lib.files[sub] || []" :key="f"
               style="font-family:var(--font-mono);font-size:12px;line-height:20px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f }}</div>
           </div>
         </div>

@@ -404,14 +404,38 @@ MODEL_CATALOG: dict[str, list[dict]] = {
 # - Wan Fun-Control(FC 变体)DiT:alibaba-pai 仓库多分片
 
 
+def model_roots() -> list[Path]:
+    """模型库目录:训练器内置 + 设置中的额外目录(如 ComfyUI 的 models)。"""
+    from .settings import load
+    roots = [MODELS_DIR]
+    for d in load().get("model_dirs", []):
+        s = str(d).strip()
+        if s:
+            roots.append(Path(s))
+    return roots
+
+
+def default_download_root() -> Path:
+    from .settings import load
+    d = (load().get("default_model_dir") or "").strip()
+    return Path(d) if d else MODELS_DIR
+
+
 def _entry_public(arch: str, e: dict) -> dict:
     filename = e["file"].rsplit("/", 1)[-1]
-    local = MODELS_DIR / ROLE_SUBDIR[e["role"]] / filename
+    sub = ROLE_SUBDIR[e["role"]]
+    found = None
+    for root in model_roots():  # 任一目录里有即算就绪;local_path 指向实际所在处
+        p = root / sub / filename
+        if p.is_file():
+            found = p
+            break
+    target = default_download_root() / sub / filename
     return {
         "architecture": arch, "role": e["role"], "filename": filename,
         "repo": e["repo"], "remote_file": e["file"], "size_mb": e["size_mb"],
         "variants": e.get("variants"), "note": e.get("note", ""), "optional": bool(e.get("optional")),
-        "exists": local.is_file(), "local_path": str(local),
+        "exists": found is not None, "local_path": str(found or target),
     }
 
 

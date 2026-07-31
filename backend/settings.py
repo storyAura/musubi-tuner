@@ -11,7 +11,13 @@ from pathlib import Path
 SETTINGS_PATH = Path(__file__).resolve().parent / ".runtime" / "settings.json"
 SECRET_KEYS = ("hf_token", "modelscope_token")
 ROUTES = ("auto", "hf", "mirror", "modelscope")
-DEFAULTS = {"hf_token": "", "modelscope_token": "", "download_route": "auto"}
+DEFAULTS = {
+    "hf_token": "", "modelscope_token": "", "download_route": "auto",
+    # 额外模型库目录(与 ComfyUI models 同构:diffusion_models/text_encoders/vae/clip_vision)
+    "model_dirs": [],
+    # 默认下载位置;空 = 训练器内置 models/
+    "default_model_dir": "",
+}
 
 
 def load() -> dict:
@@ -46,6 +52,10 @@ def update(patch: dict) -> dict:
     route = patch.get("download_route")
     if route in ROUTES:
         d["download_route"] = route
+    if isinstance(patch.get("model_dirs"), list):
+        d["model_dirs"] = [str(x).strip() for x in patch["model_dirs"] if str(x).strip()]
+    if patch.get("default_model_dir") is not None and "default_model_dir" in patch:
+        d["default_model_dir"] = str(patch["default_model_dir"]).strip()
     for k in SECRET_KEYS:
         if k in patch and patch[k] is not None:  # 缺省=不动;"" = 清除;值 = 更新
             d[k] = str(patch[k]).strip()

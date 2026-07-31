@@ -52,8 +52,8 @@ export const store = reactive({
     gpuName: '', vramTotalGb: 0, vramUsedGb: 0, driver: '', computeCap: '', gpuCount: 0, source: 'none',
     backend: false, python: '', torch: null, accelerate: null,
   },
-  // 训练器模型库(models/ 目录):当前架构+变体的推荐清单与目录内现有文件
-  modelLib: { dir: '', catalog: [], files: {}, checked: false },
+  // 模型库:当前架构+变体的推荐清单与各存储目录内现有文件
+  modelLib: { dir: '', defaultDir: '', catalog: [], libraries: [], checked: false },
   // 全部 12 架构的完整模型清单(模型页「全部模型」区)
   modelLibAll: { architectures: [], checked: false },
   // 进行中的模型下载(独立于训练状态机):filename → { jobId, status }
@@ -62,6 +62,7 @@ export const store = reactive({
   settings: {
     loaded: false, download_route: 'auto',
     hf_token_set: false, hf_token_hint: '', modelscope_token_set: false, modelscope_token_hint: '',
+    model_dirs: [], default_model_dir: '',
   },
   values: {
     project_dir: '',
@@ -183,7 +184,10 @@ export async function refreshModels(autoFill = true) {
   if (demo.demoMode) return
   try {
     const data = await getJson(modelsQuery(store.values))
-    store.modelLib = { dir: data.models_dir, catalog: data.catalog, files: data.files, checked: true }
+    store.modelLib = {
+      dir: data.models_dir, defaultDir: data.default_dir || data.models_dir,
+      catalog: data.catalog, libraries: data.libraries || [], checked: true,
+    }
     if (!autoFill) return
     const filled = []
     for (const c of data.catalog) {

@@ -144,9 +144,20 @@ def test_settings_roundtrip_and_redaction():
 
         assert client.put("/api/v1/settings", json={"download_route": "bogus"}).status_code == 422
 
+        # 模型存储位置:添加目录后 models 响应出现对应库;默认下载位置可切换
+        r3 = client.put("/api/v1/settings",
+                        json={"model_dirs": ["/tmp/extra_models"], "default_model_dir": "/tmp/extra_models"}).json()
+        assert r3["model_dirs"] == ["/tmp/extra_models"]
+        m = client.get("/api/v1/models", params={"architecture": "qwen-image"}).json()
+        assert len(m["libraries"]) == 2
+        assert m["default_dir"].replace("\\", "/").endswith("/tmp/extra_models")
+
         # 清除并复位(不留测试残留)
-        r2 = client.put("/api/v1/settings", json={"hf_token": "", "download_route": "auto"}).json()
+        r2 = client.put("/api/v1/settings",
+                        json={"hf_token": "", "download_route": "auto",
+                              "model_dirs": [], "default_model_dir": ""}).json()
         assert r2["hf_token_set"] is False and r2["download_route"] == "auto"
+        assert r2["model_dirs"] == [] and r2["default_model_dir"] == ""
 
 
 def test_validation_and_cancel_queued():
