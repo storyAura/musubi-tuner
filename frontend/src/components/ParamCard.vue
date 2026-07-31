@@ -2,6 +2,7 @@
 // 一张分组参数卡:头部点击折叠(grid-rows 过渡)、字段列表、高级参数二级折叠、
 // 数据集卡附带缓存操作行(缓存 latents 走清理计划确认弹窗)。
 import FieldRow from './FieldRow.vue'
+import DatasetFields from './DatasetFields.vue'
 import { planCleanup, cacheText } from '../store.js'
 
 defineProps({ g: { type: Object, required: true } })
@@ -24,6 +25,8 @@ defineProps({ g: { type: Object, required: true } })
         <div style="display:flex;flex-direction:column;gap:16px">
           <FieldRow v-for="f in g.fields" :key="f.flag" :f="f" />
         </div>
+
+        <DatasetFields v-if="g.custom === 'datasets'" />
 
         <div v-if="g.advOpen"
           style="margin-top:16px;padding-top:16px;border-top:1px dashed var(--hairline);display:flex;flex-direction:column;gap:16px;animation:rowIn .2s ease both">

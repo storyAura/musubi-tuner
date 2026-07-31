@@ -42,6 +42,9 @@ const mainPad = computed(() => {
   return store.termOrient === 'v' ? { paddingRight: '472px' } : { paddingBottom: '268px' }
 })
 const themeLabel = computed(() => store.theme === 'dark' ? '暗色' : '亮色')
+const projectLabel = computed(() =>
+  store.datasets[0]?.image_directory || store.values.output_dir || 'workspace')
+
 const archLabel = computed(() => {
   const arch = store.values.model_arch
   const variants = (ARCH_VARIANTS[arch] || []).map(d => store.values[d.flag]).filter(Boolean)
@@ -109,7 +112,7 @@ const page = computed(() => PAGES[store.page] || TrainPage)
       </div>
       <div style="width:1px;height:20px;background:var(--hairline)"></div>
       <div style="display:flex;align-items:center;gap:8px;min-width:0">
-        <span style="font-family:var(--font-mono);font-size:12px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ store.values.project_dir }}</span>
+        <span style="font-family:var(--font-mono);font-size:12px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ projectLabel }}</span>
         <span style="font-family:var(--font-mono);font-size:11px;color:var(--mute);border:1px solid var(--hairline);border-radius:6px;padding:1px 6px;white-space:nowrap">{{ archLabel }}</span>
       </div>
       <div style="flex:1"></div>

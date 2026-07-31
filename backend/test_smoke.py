@@ -160,6 +160,38 @@ def test_settings_roundtrip_and_redaction():
         assert r2["model_dirs"] == [] and r2["default_model_dir"] == ""
 
 
+def test_multi_dataset_toml_generation():
+    from pathlib import Path as _P
+    with TestClient(app) as client:
+        r = client.post("/api/v1/jobs/train", json={
+            "architecture": "qwen-image", "workflow": "train_network",
+            "values": {"dit": "x.safetensors", "enable_bucket": True,
+                       "cache_directory": "/tmp/cache", "mixed_precision": "no"},
+            "datasets": [
+                {"image_directory": "/data/a", "resolution_w": "1024", "resolution_h": "1024",
+                 "batch_size": "1", "num_repeats": "2", "caption_extension": ".txt"},
+                {"image_directory": "/data/b", "resolution_w": "768", "resolution_h": "1152",
+                 "batch_size": "2", "num_repeats": "1", "caption_extension": ".txt"},
+            ]})
+        assert r.status_code == 200, r.text
+        job = r.json()
+        client.post(f"/api/v1/jobs/{job['job_id']}/cancel")  # 只验证生成,不真跑
+
+        argv = job["argv"]
+        cfg = _P(argv[argv.index("--dataset_config") + 1])
+        text = cfg.read_text(encoding="utf-8")
+        assert text.count("[[datasets]]") == 2
+        assert '"/data/a"' in text and "resolution = [768, 1152]" in text
+        assert "num_repeats = 2" in text
+        # 多数据集时缓存目录必须唯一(config_utils 强约束)
+        assert '"/tmp/cache/ds1"' in text and '"/tmp/cache/ds2"' in text
+        cfg.unlink(missing_ok=True)
+
+        # 无 dataset_config 且无有效数据集 → 422
+        assert client.post("/api/v1/jobs/train", json={
+            "architecture": "qwen-image", "values": {"dit": "x"}}).status_code == 422
+
+
 def test_validation_and_cancel_queued():
     with TestClient(app) as client:
         r = client.post("/api/v1/jobs/train", json={"architecture": "qwen-image", "values": {}})

@@ -65,7 +65,6 @@ function buildGroups() {
     {
       key: 'basic', eyebrow: 'BASIC', title: '基础', desc: '训练模型 + 变体/任务 + 训练方式决定后端选用哪个入口脚本。',
       fields: [
-        F('训练集目录', 'project_dir', 'path', { hint: '图片与同名 .txt 标注放在这里' }),
         F('训练模型', 'model_arch', 'select', { options: ['qwen-image', 'z-image', 'hunyuan-video', 'hunyuan-video-1.5', 'wan2.1/2.2', 'framepack', 'flux.1-kontext', 'flux.2', 'hidream-o1', 'ideogram4', 'kandinsky5', 'krea2'] }),
         ...variantFields,
         workflowField,
@@ -87,18 +86,13 @@ function buildGroups() {
       ],
     },
     {
-      key: 'dataset', eyebrow: 'DATASET', title: '数据集', desc: '支持多个 [[datasets]];此处是当前激活的那一组。', cache: true,
+      key: 'dataset', eyebrow: 'DATASET', title: '数据集', desc: '可添加多个数据集,每组独立设置;提交时自动生成 [[datasets]] 配置。', cache: true, custom: 'datasets',
       fields: [
-        F('数据集配置', 'dataset_config', 'path'),
-        F('分辨率 宽', 'resolution_w', 'num'),
-        F('分辨率 高', 'resolution_h', 'num'),
-        F('批大小', 'batch_size', 'num'),
-        F('重复次数', 'num_repeats', 'num'),
-        F('启用分桶', 'enable_bucket', 'toggle'),
+        F('数据集配置', 'dataset_config', 'path', { ph: '留空则由下方数据集自动生成', hint: '已有 TOML 文件时填这里,将覆盖下方编辑器' }),
+        F('启用分桶', 'enable_bucket', 'toggle', { hint: '对全部数据集生效' }),
         F('禁止放大', 'bucket_no_upscale', 'toggle'),
-        F('caption 扩展名', 'caption_extension', 'text'),
       ],
-      adv: [F('缓存目录', 'cache_directory', 'path', { hint: '每个 dataset 的最终缓存目录必须唯一' })],
+      adv: [F('缓存目录', 'cache_directory', 'path', { hint: '多数据集时自动分配 ds1/ds2… 子目录以保证唯一' })],
     },
     {
       key: 'network', eyebrow: 'NETWORK', title: '网络', desc: '只提交稳定名称,由 adapter 映射到 network_module 路径。',
@@ -218,6 +212,7 @@ function buildGroups() {
       advLabel: (open ? '收起高级参数' : '高级参数') + ' (' + d.adv.length + ')',
       toggleAdv: () => { store.adv[d.key] = !store.adv[d.key] },
       hasCache: !!d.cache,
+      custom: d.custom || '',
     }
   })
 }

@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import App from './App.vue'
-import { store, start, setV, ARCH_VARIANTS, demo } from './store.js'
+import { store, start, setV, mkDataset, ARCH_VARIANTS, demo } from './store.js'
 
 function resetStore() {
   demo.demoMode = false
@@ -18,6 +18,7 @@ function resetStore() {
     workflow: 'train_network',
     dataset_config: '', logging_dir: '', vae: '', attn_mode: 'sdpa', learning_rate: '1e-4',
   })
+  store.datasets = [mkDataset()]
 }
 
 describe('musubi tuner frontend', () => {

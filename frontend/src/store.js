@@ -21,7 +21,6 @@ export const demo = {
 
 // 演示模式的种子表单值(原型的假数据,仅 ?demo=1 时灌入)
 const DEMO_VALUES = {
-  project_dir: 'D:/lora/character-v1/training',
   output_dir: 'D:/lora/character-v1/output',
   output_name: 'character-v1',
   dit: 'D:/ComfyUI/models/diffusion_models/qwen_image_bf16.safetensors',
@@ -65,7 +64,6 @@ export const store = reactive({
     model_dirs: [], default_model_dir: '',
   },
   values: {
-    project_dir: '',
     model_arch: 'qwen-image',
     model_version: 'edit-2511', task: '', model_type: '',
     workflow: 'train_network',
@@ -78,10 +76,7 @@ export const store = reactive({
     dit_dtype: 'bfloat16',
     network_weights: '',
     dataset_config: '',
-    resolution_w: '1328', resolution_h: '1328',
-    batch_size: '1', num_repeats: '1',
     enable_bucket: true, bucket_no_upscale: false,
-    caption_extension: '.txt',
     cache_directory: '',
     network_module: 'standard_lora',
     network_dim: '16', network_alpha: '16', network_dropout: '0',
@@ -111,7 +106,29 @@ export const store = reactive({
     log_with: 'tensorboard', logging_dir: '',
     wandb_api_key: '', huggingface_repo_id: '', huggingface_token: '', async_upload: false,
   },
+  // 多数据集([[datasets]]):每组独立目录与参数;dataset_config 留空时由后端据此生成 TOML
+  datasets: [mkDataset()],
 })
+
+export function mkDataset() {
+  return {
+    image_directory: '', resolution_w: '1328', resolution_h: '1328',
+    batch_size: '1', num_repeats: '1', caption_extension: '.txt',
+  }
+}
+
+export function addDataset() { store.datasets = [...store.datasets, mkDataset()] }
+
+export function removeDataset(i) {
+  if (store.datasets.length <= 1) return
+  store.datasets = store.datasets.filter((_, idx) => idx !== i)
+}
+
+export function setDatasetField(i, key, val) {
+  store.datasets = store.datasets.map((d, idx) => idx === i ? { ...d, [key]: val } : d)
+  delete store.errors.dataset_config
+  store.banner = null
+}
 
 // 定时器与一次性标记(非响应式)
 let timer = null, t1 = null, t2 = null, t3 = null, t4 = null
@@ -335,8 +352,16 @@ export function validate() {
   if (v.fp8_scaled && !v.fp8_base) e.fp8_scaled = '--fp8_scaled 需要同时启用 --fp8_base'
   if (v.log_with === 'tensorboard' && !v.logging_dir) e.logging_dir = 'TensorBoard 需要指定 logging_dir'
   if (String(v.sample_every_n_epochs) === '0') e.sample_every_n_epochs = '不能为 0,关闭采样请取消「首次采样」并留空'
-  if (!v.dataset_config) e.dataset_config = '必填:dataset_config'
+  if (!v.dataset_config && !store.datasets.some(d => d.image_directory.trim())) {
+    e.dataset_config = '填写至少一个数据集的图片目录,或指定已有的 dataset_config 文件'
+  }
   return e
+}
+
+function activeDatasets() {
+  return store.datasets
+    .filter(d => d.image_directory.trim())
+    .map(d => ({ ...d, image_directory: d.image_directory.trim() }))
 }
 
 export function autoFix() {
@@ -417,6 +442,7 @@ async function submitTrain() {
       architecture: store.values.model_arch,
       workflow: store.values.workflow,
       values: trainPayloadValues(store.values),
+      datasets: activeDatasets(),
     })
     store.jobId = job.job_id
     log('dim', '[job] accepted ' + job.job_id + ' · ' + job.workflow)
@@ -438,7 +464,11 @@ async function submitCache(kind, keep) {
         vae: store.values.vae,
         text_encoder: store.values.text_encoder,
         model_version: store.values.model_version,
+        enable_bucket: store.values.enable_bucket,
+        bucket_no_upscale: store.values.bucket_no_upscale,
+        cache_directory: store.values.cache_directory,
       },
+      datasets: activeDatasets(),
     })
     store.jobId = job.job_id
     store.status = 'queued'
@@ -845,6 +875,7 @@ export function init() {
   applyAccent()
   if (demo.demoMode) {
     Object.assign(store.values, DEMO_VALUES)
+    store.datasets = [{ ...mkDataset(), image_directory: 'D:/lora/character-v1/training' }]
     store.jobId = 'job_7f3a91'
     if (!demo.seedErrors) {
       store.values.attn_mode = 'sdpa'

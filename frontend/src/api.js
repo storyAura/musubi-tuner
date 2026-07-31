@@ -55,12 +55,12 @@ export function subscribeJobEvents(jobId, onEvent) {
   return es
 }
 
-// 提交训练时剔除秘密与仅属于 UI/数据集 TOML 的字段;后端另有白名单二次把关
+// 提交训练时剔除秘密与 UI 专属字段;后端另有白名单二次把关。
+// enable_bucket / bucket_no_upscale / cache_directory 保留传输:它们用于后端生成数据集 TOML
+// (argv 白名单不含它们,不会进入命令行)。
 const OMIT_KEYS = new Set([
   'wandb_api_key', 'huggingface_token', 'huggingface_repo_id', 'async_upload',
-  'project_dir', 'model_arch', 'workflow',
-  'resolution_w', 'resolution_h', 'batch_size', 'num_repeats',
-  'enable_bucket', 'bucket_no_upscale', 'caption_extension', 'cache_directory',
+  'model_arch', 'workflow',
 ])
 
 export function trainPayloadValues(values) {
