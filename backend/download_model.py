@@ -159,30 +159,46 @@ def hf_download(repo: str, file: str, tmp: Path, endpoint: str | None) -> str:
     return hf_hub_download(repo_id=repo, filename=file, local_dir=str(tmp), endpoint=endpoint)
 
 
-def modelscope_download(repo: str, file: str, final: Path) -> None:
-    """魔搭 resolve 直链,Range 断点续传;进度由 watch 线程统一上报。"""
+def modelscope_download(repo: str, file: str, final: Path, max_retries: int = 12) -> None:
+    """魔搭 resolve 直链,Range 断点续传;大文件长连接中断时自动从断点重连。"""
     url = _source_url("modelscope", repo, file)
     part = final.with_suffix(final.suffix + ".part")
-    pos = part.stat().st_size if part.exists() else 0
-    headers = {"User-Agent": "musubi-tuner-ui"}
-    if pos:
-        headers["Range"] = f"bytes={pos}-"
-        print(f"[download] resume from {pos // (1024**2)} MB", flush=True)
-    r = urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60)
-    if pos and r.status != 206:  # 服务器不认续传就从头来
-        pos = 0
-    total = pos + int(r.headers.get("Content-Length") or 0)
-    done = pos
-    with open(part, "ab" if pos else "wb") as f:
-        while True:
-            chunk = r.read(CHUNK)
-            if not chunk:
-                break
-            f.write(chunk)
-            done += len(chunk)
-    if total and done != total:
-        raise IOError(f"incomplete download: {done}/{total} bytes")
-    part.rename(final)
+    retries = 0
+    while True:
+        pos = part.stat().st_size if part.exists() else 0
+        headers = {"User-Agent": "musubi-tuner-ui"}
+        if pos:
+            headers["Range"] = f"bytes={pos}-"
+        try:
+            r = urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60)
+            if pos and r.status != 206:  # 服务器不认续传就从头来
+                pos = 0
+                r.close()
+                part.unlink(missing_ok=True)
+                r = urllib.request.urlopen(urllib.request.Request(
+                    url, headers={"User-Agent": "musubi-tuner-ui"}), timeout=60)
+            total = pos + int(r.headers.get("Content-Length") or 0)
+            done = pos
+            if pos:
+                print(f"[download] resume from {pos // (1024**2)} MB", flush=True)
+            with open(part, "ab" if pos else "wb") as f:
+                while True:
+                    chunk = r.read(CHUNK)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    done += len(chunk)
+            if total and done != total:
+                raise IOError(f"connection dropped at {done}/{total} bytes")
+            part.rename(final)
+            return
+        except (OSError, IOError) as e:
+            retries += 1
+            if retries > max_retries:
+                raise
+            print(f"[download] 连接中断({type(e).__name__}),{retries}/{max_retries} 次重连,"
+                  f"5s 后从断点继续", flush=True)
+            time.sleep(5)
 
 
 def _dir_max_size(p: Path) -> int:
