@@ -4,7 +4,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import {
   store, init, destroy, toggleTheme, start, enqueue, askCancel, dismissToast, togglePin,
-  ARCH_VARIANTS, demo,
+  ARCH_VARIANTS, demo, clock,
 } from './store.js'
 import StatusBadge from './components/StatusBadge.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
@@ -62,6 +62,20 @@ const jobIdLabel = computed(() => {
 const hasPending = computed(() => store.pending.length > 0 || !!store.editingId)
 const pendingNote = computed(() =>
   store.editingId ? '队列已暂停 · 编辑中' : (store.pending.length ? '跑完自动接下一个' : ''))
+
+// 侧栏下载进度(任何页面可见;点击跳转模型页)
+const activeDownloads = computed(() => Object.entries(store.downloads)
+  .filter(([, d]) => ['queued', 'running', 'cancelling'].includes(d.status))
+  .map(([filename, d]) => {
+    const pct = d.total_bytes ? Math.min(100, d.bytes / d.total_bytes * 100) : 0
+    const spd = (d.speed_bps || 0) >= 1048576
+      ? (d.speed_bps / 1048576).toFixed(1) + ' MB/s'
+      : Math.round((d.speed_bps || 0) / 1024) + ' KB/s'
+    const line = d.bytes
+      ? Math.round(pct) + '% · ' + spd + (d.eta_s > 0 ? ' · 剩 ' + clock(d.eta_s) : '')
+      : '排队中…'
+    return { filename, pct, line }
+  }))
 
 const modelsCount = computed(() => {
   const c = store.modelLib.catalog
@@ -149,6 +163,19 @@ const page = computed(() => PAGES[store.page] || TrainPage)
               style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;line-height:16px;color:var(--mute);animation:rowIn .2s ease both">
               <span>↳</span><span>{{ pendingNote }}</span>
             </div>
+          </div>
+        </div>
+
+        <div v-if="activeDownloads.length" style="margin-top:32px;padding:0 24px">
+          <div style="font-family:var(--font-mono);font-size:12px;line-height:16px;letter-spacing:.5px;color:var(--mute);padding-bottom:12px">DOWNLOADS</div>
+          <div v-for="d in activeDownloads" :key="d.filename" @click="store.page = 'models'" title="点击查看模型页"
+            style="margin-bottom:12px;cursor:pointer;animation:rowIn .2s ease both">
+            <div style="font-family:var(--font-mono);font-size:11px;line-height:16px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.filename }}</div>
+            <div style="position:relative;height:4px;background:var(--hairline);border-radius:6px;margin-top:5px;overflow:visible">
+              <div :style="{ width: d.pct + '%', height: '4px', background: 'var(--ink)', borderRadius: '6px', transition: 'width .5s linear' }"></div>
+              <div :style="{ position: 'absolute', top: '-2px', left: 'calc(' + d.pct + '% - 4px)', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', transition: 'left .5s linear', animation: 'tailPulse 1.6s ease-out infinite' }"></div>
+            </div>
+            <div style="font-family:var(--font-mono);font-size:10px;line-height:14px;color:var(--mute);font-variant-numeric:tabular-nums;margin-top:4px">{{ d.line }}</div>
           </div>
         </div>
       </aside>

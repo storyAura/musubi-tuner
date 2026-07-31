@@ -130,6 +130,7 @@ def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading
     def loop():
         total_b = total_mb * 1024 * 1024
         last_size, last_t, speed = scan(), time.monotonic(), 0.0
+        last_decile = -1
         while not stop.wait(5):
             size = scan()
             now = time.monotonic()
@@ -143,6 +144,12 @@ def start_progress_watch(watch_paths: list[Path], total_mb: int, stop: threading
             print("[dlprog] " + json.dumps({
                 "bytes": size, "total_bytes": total_b, "speed_bps": int(speed), "eta_s": eta,
             }), flush=True)
+            if total_b:  # 终端里程碑:每完成 10% 一行,可见但不刷屏
+                decile = int(size / total_b * 10)
+                if decile > last_decile:
+                    last_decile = decile
+                    print(f"[download] {decile * 10}% · {size / (1024**3):.2f}/{total_b / (1024**3):.2f} GB"
+                          f" · {_fmt_bps(speed)}", flush=True)
 
     threading.Thread(target=loop, daemon=True).start()
 
