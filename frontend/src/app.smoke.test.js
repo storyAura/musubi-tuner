@@ -58,7 +58,7 @@ describe('musubi tuner frontend', () => {
   it('校验拦截无效表单;真实模式提交失败如实报错;演示模式完整状态机到 running', async () => {
     const w = mount(App, { attachTo: document.body })
 
-    // 空表单提交 → dataset_config 必填、tensorboard 需 logging_dir → 同步拦下,停在 idle
+    // 空表单提交 → dataset_config 必填 → 同步拦下,停在 idle(logging_dir 留空由后端默认 logs/)
     start()
     expect(store.status).toBe('idle')
     expect(store.banner).toBeTruthy()
@@ -66,7 +66,6 @@ describe('musubi tuner frontend', () => {
 
     // 补齐必填后提交:进入 queued 并真实 POST 后端;测试环境无后端 → 如实回落 idle 并报错
     store.values.dataset_config = 'D:/data/dataset_config.toml'
-    store.values.logging_dir = 'D:/data/logs'
     store.errors = {}
     store.banner = null
     start()

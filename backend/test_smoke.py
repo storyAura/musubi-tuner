@@ -64,6 +64,14 @@ def test_argv_rendering_follows_capability():
     j4 = " ".join(argv4)
     assert "hv_train.py" in j4 and "--fp8_base" not in j4 and "--save_precision" not in j4
 
+    # tensorboard 未填 logging_dir → 默认训练器目录下 logs/;wandb 不需要
+    j5 = " ".join(render_train_argv("qwen-image", "train_network",
+                                    {"dataset_config": "d.toml", "dit": "x", "log_with": "tensorboard"}, None))
+    assert "--logging_dir logs" in j5
+    j6 = " ".join(render_train_argv("qwen-image", "train_network",
+                                    {"dataset_config": "d.toml", "dit": "x", "log_with": "wandb"}, None))
+    assert "--logging_dir" not in j6
+
     cache = " ".join(render_cache_argv("latents", "qwen-image",
                                        {"dataset_config": "d.toml", "vae": "v.safetensors",
                                         "model_version": "edit-2511"}, keep_cache=True))

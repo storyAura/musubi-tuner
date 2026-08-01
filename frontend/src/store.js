@@ -350,7 +350,6 @@ export function validate() {
   if (v.vae && !/\.safetensors$/.test(v.vae)) e.vae = '文件不存在:检查扩展名是否为 .safetensors'
   if (v.attn_mode === 'sage_attn') e.attn_mode = 'SageAttention 当前不支持训练,请改用 sdpa 或 flash_attn'
   if (v.fp8_scaled && !v.fp8_base) e.fp8_scaled = '--fp8_scaled 需要同时启用 --fp8_base'
-  if (v.log_with === 'tensorboard' && !v.logging_dir) e.logging_dir = 'TensorBoard 需要指定 logging_dir'
   if (String(v.sample_every_n_epochs) === '0') e.sample_every_n_epochs = '不能为 0,关闭采样请取消「首次采样」并留空'
   if (!v.dataset_config && !store.datasets.some(d => d.image_directory.trim())) {
     e.dataset_config = '填写至少一个数据集的图片目录,或指定已有的 dataset_config 文件'

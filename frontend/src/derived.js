@@ -188,7 +188,7 @@ function buildGroups() {
       key: 'logging', eyebrow: 'LOGGING', title: '日志与发布', desc: '秘密只提交 secret_ref,命令预览与日志一律脱敏。',
       fields: [
         F('追踪器', 'log_with', 'select', { options: ['tensorboard', 'wandb', 'all', 'none'] }),
-        F('日志目录', 'logging_dir', 'path'),
+        F('日志目录', 'logging_dir', 'path', { ph: 'logs', hint: '留空默认使用训练器目录下的 logs/' }),
         F('W&B API Key', 'wandb_api_key', 'secret'),
         F('HF 仓库', 'huggingface_repo_id', 'text', { ph: 'user/repo' }),
         F('HF Token', 'huggingface_token', 'secret'),

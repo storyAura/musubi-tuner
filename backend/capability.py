@@ -160,6 +160,9 @@ def render_train_argv(arch: str, workflow: str, values: dict, sample_prompts_pat
             args += [f"--{k}", str(v[k])]
     if v.get("log_with") and v["log_with"] != "none":
         args += ["--log_with", str(v["log_with"])]
+        # tensorboard/all 必须有 logging_dir;留空默认 logs(cwd=仓库根,即训练器目录下)
+        if v["log_with"] != "wandb" and not v.get("logging_dir"):
+            args += ["--logging_dir", "logs"]
     if v.get("optimizer_args"):
         args += ["--optimizer_args", *str(v["optimizer_args"]).split()]
     for k in TRAIN_BOOL_KEYS:
