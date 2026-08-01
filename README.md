@@ -2,6 +2,35 @@
 
 [English](./README.md) | [日本語](./README.ja.md)
 
+## Web UI(本 fork 与上游的区别)
+
+![Musubi Tuner Web UI](./images/webui.png)
+
+上游 [kohya-ss/musubi-tuner](https://github.com/kohya-ss/musubi-tuner) 的使用方式是纯命令行:手写 TOML 数据集配置、拼接十几个 CLI 参数、盯终端滚动日志。本 fork 在**不改动训练器本体**的前提下,新增了一套开箱即用的图形界面(`backend/` FastAPI + `frontend/` Vue 3),训练逻辑与上游保持一致,便于持续同步上游更新。
+
+### 前端功能
+
+- **训练表单**:覆盖 12 个架构族(Qwen-Image、Wan2.1/2.2、HunyuanVideo (-1.5)、FramePack、FLUX.1 Kontext、FLUX.2、Z-Image、HiDream-o1、Ideogram4、Kandinsky5、Krea2),变体/任务/全量微调选项按架构条件显示;命令由后端根据 capability 表选择入口脚本并渲染 argv(`shell=False`),表单只是显示层。
+- **模型库**:12 架构官方权重清单(文件名/大小逐一经 HF API 核实)一键下载;自动实测 HF 直连 / hf-mirror / 魔搭三源速度选最快,支持断点续传与断线重连;可配置多个模型存储目录(与 ComfyUI `models/` 子目录同构)。
+- **数据集编辑器**:多数据集可视化编辑,留空 `dataset_config` 时自动按 schema 生成 TOML,缓存目录自动隔离。
+- **作业与监控**:缓存 / 训练作业串行队列,SSE 实时日志(历史可重放),tqdm 进度解析为 Epoch/Step/loss/ETA 结构化显示,VRAM 占用与 loss 曲线、采样图预览,温和取消(先 SIGTERM 后强杀)。
+- **日志与发布**:TensorBoard / W&B 追踪,`logging_dir` 留空默认训练器目录下 `logs/`;W&B / HuggingFace token 只保存在训练机本地,API 仅回传脱敏状态,注入子进程走环境变量,**绝不进命令行与日志**。
+- **预设与导出**:配置可存为预设,TOML / argv 一键复制(秘密脱敏)。
+
+### 启动
+
+```bash
+# Windows(本地 :8787)
+start.bat
+
+# Linux / AutoDL 云端(:6006,面板入口 WebUI-6006)
+bash start.sh
+```
+
+首次运行自动安装依赖;前端产物 `frontend/dist` 已随仓库提交,云端无需 node。分支约定:`webui-test` 为工作分支,完成后 fast-forward 合并进 `main`。
+
+---
+
 ## Table of Contents
 
 <details>

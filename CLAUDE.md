@@ -58,7 +58,7 @@ bash start.sh    # Linux/AutoDL(conda python、学术加速、:6006、清理孤�
 - 云端(AutoDL):单进程部署——`main.py` 挂载 `frontend/dist` 静态托管,`bash start.sh` 起 uvicorn 于 0.0.0.0:6006(面板入口 WebUI-6006)。模型放数据盘:设置页可添加存储目录(与 ComfyUI models 子目录同构:diffusion_models/text_encoders/vae/clip_vision)并切换默认下载位置。
 - 前端改动后必须 `npm run build` 并连同 `frontend/dist` 一起提交(云端无 node)。
 - 推送目标是 fork `storyAura/musubi-tuner`:`webui-test` 为工作分支,完成后 fast-forward 合并进 `main`,两分支保持同步。**不向上游 kohya-ss 提 PR。**
-- AutoDL 的 SSH/网络不稳:git 操作套 `timeout` 并重试;学术加速用 `source /etc/network_turbo`(会设代理 env,访问 hf-mirror/魔搭前需剥掉)。
+- AutoDL 的 SSH/网络不稳:git 操作套 `timeout` 并重试;学术加速用 `source /etc/network_turbo`(会设代理 env,访问 hf-mirror/魔搭前需剥掉)。SSH 网关对频繁连接会限流(banner EOF),SFTP 传大文件易被截断——**部署 dist 首选云端 `git fetch && git reset --hard origin/webui-test`**;SSH 全断时 AutoDL 控制台的 JupyterLab 终端是不走 SSH 网关的独立通道。
 
 ## 易踩的坑
 
@@ -66,3 +66,4 @@ bash start.sh    # Linux/AutoDL(conda python、学术加速、:6006、清理孤�
 - 服务重启会杀掉运行中作业的子进程(输出管道断裂),`start.sh` 已顺带清理孤儿下载进程(它们握着 HF 文件锁会卡死同文件新下载);下载均可断点续传。
 - 官方文档有已证实的笔误(Qwen VAE 所在仓库、FLUX.2 klein 文件名),`MODEL_CATALOG` 以 HF API 实测为准——新增模型条目前先用 API 核实文件名与大小,不要照抄 docs。
 - 前端测试用全文 `toContain` 断言,新增 UI 文案容易撞词(如"全量微调"/"训练类型"出现在 hint 里会误伤按架构隐藏字段的断言)。
+- dist 静态文件传输后必须**校验字节数**:半截的 JS 会让页面白屏且无报错;上游 .gitignore 排除 CLAUDE.md,fork 里用 `git add -f` 跟踪(勿改上游 .gitignore,避免合并冲突)。
